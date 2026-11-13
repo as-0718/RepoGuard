@@ -36,3 +36,6 @@ Thumbs.db
 
 # ===== 例外：规格目录必须入库 =====
 !.codeartsdoer/specs/**
+
+# ===== 本地工作过程目录（不公开） =====
+.ppt_workspace/

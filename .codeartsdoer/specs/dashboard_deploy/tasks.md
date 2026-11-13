@@ -3,7 +3,7 @@
 > 阶段：阶段 5「编码任务规划」
 > 唯一依据：`.codeartsdoer/specs/dashboard_deploy/spec.md`（1479 行，已确认）、`.codeartsdoer/specs/dashboard_deploy/design.md`（2849 行，已确认）
 > 文档性质：只描述"做什么、做到什么程度、如何验收"；本阶段不写产品代码。
-> 仓库根：`C:\Users\anshuai\Desktop\RepoGuard`（下文所有"完整路径"均相对该根目录）
+> 仓库根：`<repo-root>`（下文所有"完整路径"均相对该根目录）
 > 基线（已实测，T01 再次固化）：uv CPython 3.11.15 实跑 **377 条**（25 个 `test_*.py` + `webhook_helpers.py`），其中 **2 条既有符号链接失败**（`test_repo_walk`）、**2 skipped**；13 个冻结文件；`backend/requirements.txt` SHA-256 `18a816cd88636be844e7cd3a6662b2cdc2e13324420031f082a331a520b4bbcf`；`frontend/` 仅空目录骨架；根目录无 `.gitignore`；`deploy/` 与 `backend/app/dashboard/` 不存在；Node 实测 v24.19.0 / npm 11.17.0（兼容目标 `engines.node >= 22.12`）。
 
 ## 0. 全局约定（34 个任务共用）

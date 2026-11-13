@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 340" width="940" height="340" role="img" aria-label="RepoGuard 定时巡检流程：触发、防重入、CLI、临时文件、原子替换、日志、30 天清理">
+  <rect x="0" y="0" width="940" height="340" fill="#f5f7fb"/>
+  <text x="30" y="38" font-size="20" font-weight="700" fill="#1a1f2b">定时巡检与原子落盘</text>
+
+  <g font-size="12" fill="#1a1f2b" text-anchor="middle">
+    <rect x="24" y="80" width="120" height="72" rx="8" fill="#e8f0fe" stroke="#1f6feb"/>
+    <text x="84" y="108">触发</text>
+    <text x="84" y="128" fill="#5b6472">02:00 / 02:05</text>
+
+    <rect x="168" y="80" width="120" height="72" rx="8" fill="#ffffff" stroke="#dfe4ec"/>
+    <text x="228" y="108">防重入</text>
+    <text x="228" y="128" fill="#5b6472">flock / IgnoreNew</text>
+
+    <rect x="312" y="80" width="120" height="72" rx="8" fill="#ffffff" stroke="#dfe4ec"/>
+    <text x="372" y="108">CLI 扫描</text>
+    <text x="372" y="128" fill="#5b6472">只读</text>
+
+    <rect x="456" y="80" width="120" height="72" rx="8" fill="#ffffff" stroke="#dfe4ec"/>
+    <text x="516" y="108">写 *.tmp</text>
+    <text x="516" y="128" fill="#5b6472">--output</text>
+
+    <rect x="600" y="80" width="120" height="72" rx="8" fill="#ffffff" stroke="#dfe4ec"/>
+    <text x="660" y="108">原子替换</text>
+    <text x="660" y="128" fill="#5b6472">mv / Move-Item</text>
+
+    <rect x="744" y="80" width="170" height="72" rx="8" fill="#fff8e6" stroke="#f0c36d"/>
+    <text x="829" y="108">日志 / 失败标记</text>
+    <text x="829" y="128" fill="#8a5a00">logs/YYYYMMDD.log</text>
+  </g>
+
+  <g stroke="#5b6472" stroke-width="2">
+    <line x1="144" y1="116" x2="168" y2="116"/>
+    <line x1="288" y1="116" x2="312" y2="116"/>
+    <line x1="432" y1="116" x2="456" y2="116"/>
+    <line x1="576" y1="116" x2="600" y2="116"/>
+    <line x1="720" y1="116" x2="744" y2="116"/>
+  </g>
+
+  <rect x="24" y="200" width="890" height="48" rx="8" fill="#ffffff" stroke="#dfe4ec"/>
+  <text x="40" y="229" font-size="12" fill="#1a1f2b">失败分支：删除 *.tmp、追加错误摘要、touch YYYYMMDD.failed、退出码非 0；正式产物保留上次成功版本。</text>
+
+  <rect x="24" y="262" width="890" height="48" rx="8" fill="#f8fafc" stroke="#dfe4ec"/>
+  <text x="40" y="291" font-size="12" fill="#1a1f2b">保留策略：每日 02:10 先 find -print 列出、再 -delete 清理 mtime 超过 30 天的文件；Windows 用 LastWriteTime + -DryRun 预览。</text>
+</svg>

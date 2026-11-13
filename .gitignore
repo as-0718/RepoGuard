@@ -1,0 +1,38 @@
+# ===== 依赖与构建产物 =====
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# ===== 运行时产物（定时巡检） =====
+artifacts/
+
+# ===== Python =====
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# ===== 本地环境与密钥 =====
+.env
+deploy/.env
+*.local
+
+# ===== 日志与覆盖率 =====
+*.log
+.coverage
+htmlcov/
+
+# ===== 工具缓存目录 =====
+.cache/
+.mypy_cache/
+.ruff_cache/
+
+# ===== 操作系统与编辑器 =====
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ===== 例外：规格目录必须入库 =====
+!.codeartsdoer/specs/**

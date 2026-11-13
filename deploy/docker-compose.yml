@@ -1,0 +1,58 @@
+name: repoguard
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    image: repoguard-api:1.0.0
+    env_file:
+      - .env
+    # 仅回环暴露，禁止改为公网绑定或自定义映射端口
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ../artifacts:/app/artifacts
+      - ../demo-repo:/srv/repoguard/repos/demo-repo:ro
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  webhook:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    image: repoguard-api:1.0.0
+    command: ["python", "-m", "app.webhook"]
+    env_file:
+      - .env
+    # 仅回环暴露；nginx 默认不代理 /webhook
+    ports:
+      - "127.0.0.1:8010:8010"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    image: repoguard-frontend:1.0.0
+    depends_on:
+      - api
+    # 80/443 面向外部，暴露范围由安全组控制；生产证书卷按实际环境追加
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

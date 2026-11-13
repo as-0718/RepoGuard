@@ -1,0 +1,20 @@
+{
+  "event_id": "evt-pr-created-001",
+  "action": "opened",
+  "repository": {
+    "full_name": "acme/lab-01"
+  },
+  "pull_request": {
+    "number": 12,
+    "base": {
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "head": {
+      "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  },
+  "changed_files": [
+    "lab/main.py",
+    "docs/lab01.md"
+  ]
+}

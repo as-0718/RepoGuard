@@ -1,0 +1,15 @@
+# RepoGuard 样例变更清单（UTF-8，用于本地测试）
+# 状态：A=新增  M=修改  D=删除
+
+A docs/lab03_串口通信实验.md
+M lab/uart/uart_demo.c
+A lab/uart/UART Demo-v2.C
+A docs/uart_demo.c
+A backend/app/example_config.py
+M docs/lab02_broken_link.md
+A assets/large_sample.mp4
+D notes/old_lab02.md
+A backend/tests/test_demo.py
+M lab/uart/uart_demo.c
+X notes/unknown_status.md
+M

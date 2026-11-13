@@ -1,0 +1,90 @@
+# ============================================================================
+# ⚠ schema 假设声明：CodeArts 流水线官方 YAML schema 未经核实。
+# 本文件是"模板草案"，字段名与层级以控制台可视化配置为准；
+# 导入失败时以控制台为准，按可视化配置逐步创建等价步骤（见 deploy/README.md 第 7.4 节）。
+# 本文件不含任何密钥/云凭证；禁止在此执行容器推送、云 CLI 或上云操作。
+# 巡检步骤统一使用 *.tmp 临时文件，成功后 mv 为正式文件（原子落盘）。
+# 同一流水线禁止并发：concurrency.policy=queue，以控制台配置为准。
+# ============================================================================
+version: "1.0"
+name: repoguard-daily
+description: RepoGuard 每日巡检（测试 → 扫描 → 归档）
+
+# 假设字段：并发策略；以控制台"同一流水线不并发"配置为准
+concurrency:
+  enable: true
+  policy: queue
+
+triggers:
+  - type: schedule
+    # 时区以 CodeArts 控制台为准（默认北京时间）；需人工确认
+    cron: "0 2 * * *"
+    enabled: true
+
+variables:
+  - name: REPOGUARD_REPO_ROOT
+    value: demo-repo            # 相对检出目录，按控制台工作区实际结构调整
+  - name: PYTHONUNBUFFERED
+    value: "1"
+
+stages:
+  - name: backend
+    displayName: 后端依赖与测试
+    steps:
+      - name: install
+        displayName: 安装后端依赖
+        script: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+      - name: unittest
+        displayName: 后端单元测试
+        script: |
+          mkdir -p artifacts/logs
+          cd backend
+          python -m unittest discover -s tests -t . 2>&1 | tee ../artifacts/logs/unittest.log
+
+  - name: inspect
+    displayName: 巡检与扫描
+    steps:
+      - name: health
+        displayName: 健康巡检
+        script: |
+          mkdir -p artifacts/health artifacts/logs
+          day=$(date +%Y%m%d)
+          cd backend
+          python -m app.health.cli --repo "../$REPOGUARD_REPO_ROOT" --format json \
+            --output "../artifacts/health/health-$day.json.tmp"
+          mv "../artifacts/health/health-$day.json.tmp" "../artifacts/health/health-$day.json"
+      - name: readme
+        displayName: README 扫描
+        script: |
+          mkdir -p artifacts/readme artifacts/logs
+          day=$(date +%Y%m%d)
+          cd backend
+          python -m app.readme.cli --repo "../$REPOGUARD_REPO_ROOT" --format json \
+            --output "../artifacts/readme/readme-$day.json.tmp"
+          mv "../artifacts/readme/readme-$day.json.tmp" "../artifacts/readme/readme-$day.json"
+
+  - name: frontend
+    displayName: 前端构建（可选）
+    condition: optional
+    steps:
+      - name: build
+        displayName: 构建前端
+        script: |
+          cd frontend
+          npm ci
+          npm run build
+
+  - name: archive
+    displayName: 产物归档
+    steps:
+      - name: archive-artifacts
+        displayName: 归档快照与构建产物
+        # 假设字段：以控制台"归档"步骤为准
+        uses: archive
+        with:
+          paths:
+            - artifacts/**
+            - frontend/dist/**
+          retention: 30

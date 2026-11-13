@@ -1,0 +1,21 @@
+[Unit]
+Description=RepoGuard Webhook (independent process)
+After=network.target
+
+[Service]
+Type=simple
+User=repoguard
+Group=repoguard
+WorkingDirectory=/opt/repoguard/backend
+EnvironmentFile=/opt/repoguard/deploy/.env
+ExecStart=/opt/repoguard/.venv/bin/python -m app.webhook
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

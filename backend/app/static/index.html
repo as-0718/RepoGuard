@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RepoGuard 学习仓库检查台</title>
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --panel: #ffffff;
+    --text: #1f2937;
+    --muted: #5b6574;
+    --line: #d8dee9;
+    --fix: #b42318;
+    --fix-bg: #fef3f2;
+    --tip: #175cd3;
+    --tip-bg: #eff8ff;
+    --ok: #067647;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 16px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+    line-height: 1.6;
+  }
+  main { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); margin: 0 0 16px; }
+  section, form {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  label { display: block; font-weight: 600; margin-bottom: 6px; }
+  textarea {
+    width: 100%;
+    min-height: 180px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.95rem;
+    resize: vertical;
+  }
+  input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 0.95rem;
+  }
+  .hint { color: var(--muted); font-size: 0.86rem; margin: 4px 0 10px; }
+  .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  button {
+    border: 0;
+    border-radius: 8px;
+    padding: 9px 18px;
+    background: #1d4ed8;
+    color: #ffffff;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  button:disabled { background: #93a4c4; cursor: not-allowed; }
+  #loading-indicator { color: var(--muted); }
+  #error-box {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--fix-bg);
+    color: var(--fix);
+    border: 1px solid #fda29b;
+  }
+  #health-status { font-size: 0.9rem; color: var(--muted); }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px;
+  }
+  .summary-item {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .summary-item strong { display: block; font-size: 1.15rem; }
+  .summary-item span { color: var(--muted); font-size: 0.86rem; }
+  .group {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin: 8px 0;
+    padding: 8px 10px;
+  }
+  .group > summary {
+    cursor: pointer;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .skip { color: var(--muted); font-weight: normal; font-size: 0.86rem; }
+  .finding {
+    border-left: 3px solid var(--line);
+    padding: 6px 10px;
+    margin: 8px 0;
+    overflow-wrap: anywhere;
+  }
+  .finding.fix { border-left-color: var(--fix); background: var(--fix-bg); }
+  .finding.tip { border-left-color: var(--tip); background: var(--tip-bg); }
+  .finding p { margin: 2px 0; }
+  .meta { color: var(--muted); font-size: 0.86rem; }
+  .none { color: var(--muted); }
+  #degraded-box, #unparsed-box {
+    border: 1px solid #f7c948;
+    background: #fff9e6;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 10px 0;
+  }
+  #empty-state { color: var(--ok); font-weight: 600; }
+  #unparsed-box pre {
+    margin: 4px 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.86rem;
+  }
+  details > summary { cursor: pointer; }
+  @media (max-width: 480px) {
+    body { padding: 10px; }
+    h1 { font-size: 1.25rem; }
+    .summary-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>RepoGuard 学习仓库检查台</h1>
+  <p class="subtitle">粘贴变更清单，检查命名、代码、链接与敏感信息问题。结果分为「必须修改」与「优化建议」。</p>
+
+  <form id="review-form" novalidate>
+    <label for="manifest-input">变更清单</label>
+    <textarea id="manifest-input" maxlength="1000000" required placeholder="A docs/lab03_串口通信实验.md&#10;M lab/uart/uart_demo.c"></textarea>
+    <p class="hint">每行格式：状态 + 空格 + 文件路径；A=新增，M=修改，D=删除。最多 1,000,000 个字符。</p>
+
+    <details id="advanced-settings">
+      <summary>高级设置</summary>
+      <div style="margin-top: 10px;">
+        <label for="repo-input">仓库路径</label>
+        <input id="repo-input" type="text" maxlength="512" autocomplete="off" placeholder="留空则使用默认仓库">
+        <p class="hint">只能访问服务端白名单内的仓库目录。</p>
+      </div>
+    </details>
+
+    <div class="actions">
+      <button id="submit-button" type="submit">开始检查</button>
+      <span id="loading-indicator" hidden aria-live="polite">检查中…</span>
+      <span id="health-status">正在读取服务状态…</span>
+    </div>
+    <div id="error-box" hidden aria-live="polite" role="alert"></div>
+  </form>
+
+  <section id="summary-panel" hidden aria-label="检查统计">
+    <h2>检查统计</h2>
+    <div id="summary-values" class="summary-grid"></div>
+  </section>
+
+  <section id="must-fix-section" hidden aria-label="必须修改">
+    <h2 style="color: var(--fix);">必须修改</h2>
+    <div id="must-fix-groups"></div>
+  </section>
+
+  <section id="suggestion-section" hidden aria-label="优化建议">
+    <h2 style="color: var(--tip);">优化建议</h2>
+    <div id="suggestion-groups"></div>
+  </section>
+
+  <div id="degraded-box" hidden aria-live="polite"></div>
+  <div id="unparsed-box" hidden aria-live="polite"></div>
+  <div id="empty-state" hidden>未发现问题</div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var state = { defaultRepo: null, loading: false };
+
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  function clear(node) {
+    while (node.firstChild) {
+      node.removeChild(node.firstChild);
+    }
+  }
+
+  function textNode(text) {
+    return document.createTextNode(text == null ? "" : String(text));
+  }
+
+  function make(tag, text, className) {
+    var node = document.createElement(tag);
+    if (text != null) {
+      node.appendChild(textNode(text));
+    }
+    if (className) {
+      node.className = className;
+    }
+    return node;
+  }
+
+  function setHidden(id, hidden) {
+    byId(id).hidden = hidden;
+  }
+
+  function showError(message) {
+    var box = byId("error-box");
+    clear(box);
+    box.appendChild(textNode(message));
+    box.hidden = false;
+  }
+
+  function clearError() {
+    var box = byId("error-box");
+    clear(box);
+    box.hidden = true;
+  }
+
+  function setLoading(loading) {
+    state.loading = loading;
+    byId("submit-button").disabled = loading;
+    byId("loading-indicator").hidden = !loading;
+  }
+
+  function summaryItem(label, value) {
+    var item = make("div", null, "summary-item");
+    item.appendChild(make("strong", value));
+    item.appendChild(make("span", label));
+    return item;
+  }
+
+  function summaryValue(summary, key) {
+    if (!summary || summary[key] == null) {
+      return "0";
+    }
+    return String(summary[key]);
+  }
+
+  function renderSummary(data) {
+    var panel = byId("summary-panel");
+    var values = byId("summary-values");
+    clear(values);
+    var summary = data.summary || {};
+    values.appendChild(summaryItem("条目总数", summaryValue(summary, "entry_count")));
+    values.appendChild(summaryItem("问题总数", summaryValue(summary, "issue_count")));
+    values.appendChild(summaryItem("必须修改", summaryValue(summary, "must_fix_count")));
+    values.appendChild(summaryItem("优化建议", summaryValue(summary, "suggestion_count")));
+    values.appendChild(summaryItem("跳过文件", summaryValue(summary, "skipped_file_count")));
+    values.appendChild(summaryItem("降级模块", summaryValue(summary, "degraded_module_count")));
+    values.appendChild(summaryItem("无法解析行", summaryValue(summary, "unparsed_line_count")));
+    panel.hidden = false;
+  }
+
+  function findingNode(finding, levelClass) {
+    var wrap = make("div", null, "finding " + levelClass);
+    var message = finding.line_no == null
+      ? finding.message
+      : "第 " + finding.line_no + " 行：" + finding.message;
+    wrap.appendChild(make("p", message));
+    wrap.appendChild(make("p", "建议：" + finding.suggestion, "meta"));
+    wrap.appendChild(make("p", "规则：" + finding.rule_id, "meta"));
+    if (finding.excerpt) {
+      wrap.appendChild(make("p", "片段：" + finding.excerpt, "meta"));
+    }
+    return wrap;
+  }
+
+  function appendChunked(container, items, build) {
+    if (items.length <= 100) {
+      var fragment = document.createDocumentFragment();
+      items.forEach(function (item) {
+        fragment.appendChild(build(item));
+      });
+      container.appendChild(fragment);
+      return;
+    }
+    var index = 0;
+    function step() {
+      var chunk = document.createDocumentFragment();
+      var end = Math.min(index + 50, items.length);
+      while (index < end) {
+        chunk.appendChild(build(items[index]));
+        index += 1;
+      }
+      container.appendChild(chunk);
+      if (index < items.length) {
+        setTimeout(step, 0);
+      }
+    }
+    step();
+  }
+
+  function renderLevel(containerId, data, level, levelClass) {
+    var container = byId(containerId);
+    clear(container);
+    var groups = [];
+    (data.files || []).forEach(function (file) {
+      var matches = (file.findings || []).filter(function (finding) {
+        return finding.level === level;
+      });
+      if (matches.length > 0 || file.skip_reason) {
+        groups.push({ file: file, findings: matches });
+      }
+    });
+    if (groups.length === 0) {
+      container.appendChild(make("p", "无", "none"));
+      return;
+    }
+    groups.sort(function (left, right) {
+      return right.findings.length - left.findings.length;
+    });
+    groups.forEach(function (entry) {
+      var details = make("details", null, "group");
+      if (groups.indexOf(entry) < 3) {
+        details.open = true;
+      }
+      var title = make("summary", entry.file.file_path);
+      if (entry.file.skip_reason) {
+        title.appendChild(make("span", "（" + entry.file.skip_reason + "）", "skip"));
+      }
+      details.appendChild(title);
+      appendChunked(details, entry.findings, function (finding) {
+        return findingNode(finding, levelClass);
+      });
+      container.appendChild(details);
+    });
+  }
+
+  function renderDegraded(data) {
+    var box = byId("degraded-box");
+    var modules = data.degraded_modules || [];
+    var warnings = data.warnings || [];
+    var degraded = data.status === "部分降级" || modules.length > 0 || warnings.length > 0;
+    clear(box);
+    if (!degraded) {
+      box.hidden = true;
+      return;
+    }
+    box.appendChild(make("p", "结果可能不完整"));
+    modules.forEach(function (item) {
+      box.appendChild(make("p", item.module + "：" + item.reason));
+    });
+    warnings.forEach(function (warning) {
+      box.appendChild(make("p", "提示：" + warning));
+    });
+    box.hidden = false;
+  }
+
+  function renderUnparsed(data) {
+    var box = byId("unparsed-box");
+    var items = data.unparsed_lines || [];
+    clear(box);
+    if (items.length === 0) {
+      box.hidden = true;
+      return;
+    }
+    box.appendChild(make("p", "无法解析的清单行"));
+    items.forEach(function (item) {
+      box.appendChild(make("p", "第 " + item.line_no + " 行：" + item.reason));
+      box.appendChild(make("pre", item.raw));
+    });
+    box.hidden = false;
+  }
+
+  function render(data) {
+    clearError();
+    var summary = data.summary || {};
+    renderDegraded(data);
+    renderSummary(data);
+    renderLevel("must-fix-groups", data, "必须修改", "fix");
+    renderLevel("suggestion-groups", data, "优化建议", "tip");
+    renderUnparsed(data);
+    var empty = summary.issue_count === 0
+      && summary.skipped_file_count === 0
+      && summary.degraded_module_count === 0;
+    setHidden("empty-state", !empty);
+    setHidden("must-fix-section", false);
+    setHidden("suggestion-section", false);
+  }
+
+  function clearResults() {
+    setHidden("summary-panel", true);
+    setHidden("must-fix-section", true);
+    setHidden("suggestion-section", true);
+    setHidden("empty-state", true);
+    setHidden("degraded-box", true);
+    setHidden("unparsed-box", true);
+    clear(byId("summary-values"));
+    clear(byId("must-fix-groups"));
+    clear(byId("suggestion-groups"));
+  }
+
+  async function loadHealth() {
+    try {
+      var response = await fetch("/api/health");
+      var data = await response.json();
+      state.defaultRepo = data.default_repo || null;
+      var label = response.ok ? "服务正常" : "服务状态异常";
+      byId("health-status").textContent = label + "（默认仓库：" + (state.defaultRepo || "未设置") + "）";
+    } catch (error) {
+      byId("health-status").textContent = "服务状态异常";
+    }
+  }
+
+  async function submitReview(event) {
+    event.preventDefault();
+    if (state.loading) {
+      return;
+    }
+    var manifest = byId("manifest-input").value;
+    if (!manifest.trim()) {
+      showError("请先粘贴变更清单");
+      return;
+    }
+    var repo = byId("repo-input").value.trim() || state.defaultRepo;
+    if (!repo) {
+      showError("请先在高级设置中填写仓库路径");
+      return;
+    }
+
+    clearError();
+    clearResults();
+    setLoading(true);
+    try {
+      var response = await fetch("/api/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ manifest: manifest, repo: repo })
+      });
+      var data = null;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        showError("服务返回了无法识别的内容，请检查服务状态");
+        return;
+      }
+      if (!response.ok) {
+        var message = data && data.error && data.error.message
+          ? data.error.message
+          : "HTTP " + response.status + "：检查未完成";
+        showError(message);
+        return;
+      }
+      render(data);
+    } catch (networkError) {
+      showError("无法连接服务，请确认服务已启动");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  byId("review-form").addEventListener("submit", submitReview);
+  clearResults();
+  loadHealth();
+})();
+</script>
+</body>
+</html>

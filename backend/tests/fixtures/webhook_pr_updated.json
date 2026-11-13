@@ -1,0 +1,25 @@
+{
+  "event_id": "evt-pr-updated-001",
+  "action": "updated",
+  "repository": {
+    "full_name": "acme/lab-01"
+  },
+  "pull_request": {
+    "number": 13,
+    "base": {
+      "sha": "cccccccccccccccccccccccccccccccccccccccc"
+    },
+    "head": {
+      "sha": "dddddddddddddddddddddddddddddddddddddddd"
+    }
+  },
+  "added_files": [
+    "lab/new_demo.py"
+  ],
+  "modified_files": [
+    "lab/main.py"
+  ],
+  "removed_files": [
+    "lab/old_demo.py"
+  ]
+}

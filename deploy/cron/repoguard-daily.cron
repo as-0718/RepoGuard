@@ -1,0 +1,12 @@
+# RepoGuard 每日巡检（默认本地时区；百分号已按 cron 规则转义）
+# 安装前先执行：mkdir -p /opt/repoguard/artifacts/{health,readme,logs}
+# 时区核对：timedatectl（或 date）确认系统本地时区；容器内 cron 默认 UTC，需显式设置 TZ
+SHELL=/bin/sh
+PATH=/usr/local/bin:/usr/bin:/bin
+
+0 2 * * * cd /opt/repoguard/backend && flock -n /tmp/repoguard-health.lock /bin/sh -c 'set -e; day=$(date +\%Y\%m\%d); out=/opt/repoguard/artifacts/health/health-$day.json; /opt/repoguard/.venv/bin/python -m app.health.cli --repo /opt/repoguard/demo-repo --format json --output "$out.tmp" >> /opt/repoguard/artifacts/logs/$day.log 2>&1 && mv "$out.tmp" "$out" || { rc=$?; rm -f "$out.tmp"; echo "health failed rc=$rc at $(date -Iseconds)" >> /opt/repoguard/artifacts/logs/$day.log; touch /opt/repoguard/artifacts/logs/$day.failed; exit $rc; }'
+
+5 2 * * * cd /opt/repoguard/backend && flock -n /tmp/repoguard-readme.lock /bin/sh -c 'set -e; day=$(date +\%Y\%m\%d); out=/opt/repoguard/artifacts/readme/readme-$day.json; /opt/repoguard/.venv/bin/python -m app.readme.cli --repo /opt/repoguard/demo-repo --format json --output "$out.tmp" >> /opt/repoguard/artifacts/logs/$day.log 2>&1 && mv "$out.tmp" "$out" || { rc=$?; rm -f "$out.tmp"; echo "readme failed rc=$rc at $(date -Iseconds)" >> /opt/repoguard/artifacts/logs/$day.log; touch /opt/repoguard/artifacts/logs/$day.failed; exit $rc; }'
+
+# 每日 02:10 清理 30 天前的产物与日志（先列后删）
+10 2 * * * cd /opt/repoguard && /bin/sh -c 'day=$(date +\%Y\%m\%d); find artifacts -type f -mtime +30 ! -name "*.tmp" -print >> artifacts/logs/$day.log 2>&1; find artifacts -type f -mtime +30 ! -name "*.tmp" -delete >> artifacts/logs/$day.log 2>&1'

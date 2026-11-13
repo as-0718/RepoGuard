@@ -1,0 +1,22 @@
+{
+  "event_id": "evt-mr-created-001",
+  "action": "open",
+  "project": {
+    "path_with_namespace": "acme/lab-02"
+  },
+  "merge_request": {
+    "iid": 34
+  },
+  "object_attributes": {
+    "action": "open",
+    "target": {
+      "sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "last_commit": {
+      "id": "ffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "changed_files": [
+    "lab/uart/uart_demo.c"
+  ]
+}

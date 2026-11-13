@@ -1,0 +1,8 @@
+# ===== RepoGuard 规则引擎运行依赖（Python >= 3.10，仅标准库，零第三方包）=====
+
+# ===== RepoGuard Web API 运行依赖 =====
+fastapi==0.115.6
+uvicorn==0.34.0
+
+# ===== 仅 Web API 单元测试使用（TestClient 依赖 httpx）=====
+httpx==0.28.1

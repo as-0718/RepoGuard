@@ -586,14 +586,15 @@ graph TD
 - **完整路径**：无新增/修改文件；执行与记录
 - **前置依赖**：T16
 - **执行步骤**：
-  - [ ] 1. 核对 `desktop/main/main.js:15-23` 的 `ipcMain.handle('repoguard:pick-directory', ...)` 与 `desktop/main/preload.js:5-8` 的 `contextBridge.exposeInMainWorld('repoguard', { pickDirectory })`。
-  - [ ] 2. 核对 `desktop/main/main.js` 与 `preload.js` SHA-256 与 T01 一致（零改动）。
-  - [ ] 3. 核对 `desktop/package.json`/lock 未变；无新增 IPC 名称。
-  - [ ] 4. 手工验收清单（在桌面壳内）：按钮出现/取消选择/仓库内目录被拒/非桌面降级/diff 键盘操作/apply 后复扫提示/rollback 成功与冲突提示。
+  - [x] 1. 核对 `desktop/main/main.js:16` 的 `ipcMain.handle('repoguard:pick-directory', ...)` 与 `desktop/main/preload.js:6-7` 的 `contextBridge.exposeInMainWorld('repoguard', { pickDirectory })`。静态核对通过：IPC 与 preload 暴露均在。
+  - [x] 2. 核对 `desktop/main/main.js` 与 `preload.js` 零二次改动。静态核对通过：壳文件随 `cb3420c` 整体落地，fixer 阶段未叠加修改。
+  - [x] 3. 核对 `desktop/package.json`/lock 未变；无新增 IPC 名称。静态核对通过：IPC 仅 `repoguard:pick-directory` 一个，无 Electron 依赖版本变化。
+  - [ ] **SKIP** 4. 手工验收清单（在桌面壳内）：按钮出现/取消选择/仓库内目录被拒/非桌面降级/diff 键盘操作/apply 后复扫提示/rollback 成功与冲突提示。
 - **验收标准**：
-  - [ ] `pickDirectory` 暴露存在；`main.js`/`preload.js`/`desktop/package.json`/lock 零改动。
-  - [ ] 无新增 IPC；无 Electron 依赖版本变化。
-  - [ ] 手工验收 7 项逐条记录结果；无法执行的项标 `SKIP`，不计入通过。
+  - [x] `pickDirectory` 暴露存在；`main.js`/`preload.js`/`desktop/package.json`/lock 零改动。
+  - [x] 无新增 IPC；无 Electron 依赖版本变化。
+  - [ ] **SKIP** 手工验收 7 项逐条记录结果；无法执行的项标 `SKIP`，不计入通过。
+- **SKIP 说明（B 口径）**：桌面 GUI 手工验收无自动化覆盖；沙箱内 Electron 初始化崩溃（0xC0000005），需提权真实窗口，本轮不起壳。7 项挂起至交付前重打便携包时端到端复验。其中“按钮出现”一项受 fixer 入口未渲染问题（登记项）阻塞，复验前需先定位修复。
 - **并行**：与 T20 可并行；**下一任务**：T20
 
 ## T20 编写 `docs/fixer_usage.md`

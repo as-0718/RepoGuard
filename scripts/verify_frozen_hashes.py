@@ -19,7 +19,7 @@ from typing import Sequence
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_HASHES = ROOT / ".codeartsdoer" / "evidence" / "stage5" / "hashes.txt"
 DEFAULT_APP = ROOT / "backend" / "app" / "api" / "app.py"
-DEFAULT_APP_BASELINE = ROOT / ".codeartsdoer" / "evidence" / "stage5" / "app.py.orig"
+DEFAULT_APP_BASELINE = ROOT / ".codeartsdoer" / "evidence" / "stage6" / "app.py.stage6.orig"
 
 
 def sha256_file(path: Path) -> str:

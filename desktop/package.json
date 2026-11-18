@@ -1,0 +1,36 @@
+{
+  "name": "repoguard-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RepoGuard 桌面壳：拉起本地后端并在桌面窗口展示巡检看板",
+  "main": "main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.yunhengzhilian.repoguard",
+    "productName": "RepoGuard",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      { "from": "../frontend/dist", "to": "web" },
+      { "from": "../backend/dist", "to": "backend" },
+      { "from": "../demo-repo", "to": "demo-repo" },
+      { "from": "../data", "to": "data" }
+    ],
+    "win": {
+      "target": "dir"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.3.3",
+    "electron-builder": "^26.18.0"
+  }
+}

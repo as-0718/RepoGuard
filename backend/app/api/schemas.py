@@ -12,6 +12,11 @@ class ReviewRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class CheckRepoRequest(BaseModel):
+    path: str
+    model_config = ConfigDict(extra="ignore")
+
+
 class ErrorBody(BaseModel):
     code: str
     message: str

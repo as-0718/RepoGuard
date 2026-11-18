@@ -252,13 +252,26 @@ def health(
     except Exception:
         engine_available = False
 
-    default_root = default_repo_root(settings)
-    healthy = engine_available and bool(settings.allowed_repo_roots) and default_root is not None
+    if getattr(settings, "desktop_mode", False):
+        # 桌面单机模式：仓库由用户运行时选择，启动时不要求预置默认仓库。
+        healthy = engine_available
+    else:
+        default_root = default_repo_root(settings)
+        healthy = engine_available and bool(settings.allowed_repo_roots) and default_root is not None
+
+    try:
+        from app.storage import db_available
+
+        database_available = db_available(settings.db_path)
+    except Exception:
+        database_available = False
+
     payload = {
         "status": "ok" if healthy else "degraded",
         "service": SERVICE_NAME,
         "version": SERVICE_VERSION,
         "engine": "available" if engine_available else "unavailable",
+        "database": "available" if database_available else "unavailable",
         "default_repo": settings.default_repo,
         "allowed_repo_root_count": len(settings.allowed_repo_roots),
         "time": datetime.now(timezone.utc).isoformat(),

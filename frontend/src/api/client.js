@@ -1,4 +1,4 @@
-export const DEFAULT_TIMEOUT_MS = 15000
+export const DEFAULT_TIMEOUT_MS = 45000
 
 export const ERROR_CODE_MESSAGES = {
   INVALID_QUERY_PARAM: '查询参数不合法，请检查筛选条件',
@@ -51,7 +51,10 @@ function toClientError(payload, status) {
   })
 }
 
-export async function requestJson(path, { params, signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+export async function requestJson(
+  path,
+  { method = 'GET', params, body, signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {},
+) {
   const controller = new AbortController()
   let timedOut = false
   const timer = setTimeout(() => {
@@ -67,11 +70,18 @@ export async function requestJson(path, { params, signal, timeoutMs = DEFAULT_TI
   const query = buildQuery(params)
   const url = query ? `${path}?${query}` : path
 
+  const init = {
+    method,
+    headers: { Accept: 'application/json' },
+    signal: controller.signal,
+  }
+  if (body !== undefined) {
+    init.headers['Content-Type'] = 'application/json'
+    init.body = JSON.stringify(body)
+  }
+
   try {
-    const response = await fetch(url, {
-      headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    })
+    const response = await fetch(url, init)
 
     if (!response.ok) {
       let payload = null

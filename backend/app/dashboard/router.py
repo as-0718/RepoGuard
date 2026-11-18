@@ -5,11 +5,15 @@ import dataclasses
 import datetime
 import json
 import logging
+import os
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 import fastapi
 import starlette.responses
+
+from ..api.schemas import CheckRepoRequest
 
 
 from .cache import CacheBusyError, CacheTimeoutError, SnapshotCache
@@ -133,6 +137,33 @@ def _descriptor_for(
     return RepoDescriptor(name, name, is_default)
 
 
+def _persist_snapshot(
+    web_settings: object,
+    repo_key: str,
+    descriptor: RepoDescriptor,
+    snapshot: DashboardSnapshot,
+) -> None:
+    """把一次真实巡检结果落库；存储层失败内部降级，不抛出。"""
+    from ..storage import record_snapshot
+
+    summary = dict(snapshot.summary)
+    record_snapshot(
+        web_settings.db_path,
+        repo_label=descriptor.label,
+        repo_key=repo_key,
+        scanned_at=snapshot.snapshot.scanned_at,
+        duration_ms=snapshot.snapshot.duration_ms,
+        files_count=snapshot.files_count,
+        issue_count=summary.get("issue_count", 0),
+        must_fix_count=summary.get("must_fix_count", 0),
+        suggestion_count=summary.get("suggestion_count", 0),
+        zombie_count=summary.get("zombie_candidate_count", snapshot.zombie_candidates_count),
+        undetermined_count=summary.get("undetermined_count", snapshot.undetermined_count),
+        status=snapshot.snapshot.status,
+        issues=snapshot.issues,
+    )
+
+
 async def _prepare(
     request: fastapi.Request,
     repo: str | None,
@@ -210,6 +241,8 @@ async def _prepare(
             ensure_ascii=False,
         )
     )
+    if not cache_meta.cached:
+        await asyncio.to_thread(_persist_snapshot, web_settings, key, descriptor, snapshot)
     request.state.error_code = "OK"
     return snapshot
 
@@ -231,6 +264,52 @@ def repos(
             "repos": [to_dict(item) for item in descriptors],
             "default_repo": default,
             "generated_at": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),
+        },
+    )
+
+
+_SKIP_DIRS = {
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    ".cache",
+    ".idea",
+    ".vscode",
+}
+
+
+def _count_files(root: Path, cap: int = 10_000) -> int:
+    """统计目录下文件数量，跳过常见依赖/构建目录，达到上限即停止。"""
+    count = 0
+    for _dir, dirs, files in os.walk(root):
+        dirs[:] = [name for name in dirs if name not in _SKIP_DIRS]
+        count += len(files)
+        if count >= cap:
+            return cap
+    return count
+
+
+@router.post("/check-repo")
+def check_repo(
+    request: fastapi.Request,
+    payload: CheckRepoRequest = fastapi.Body(...),
+    web_settings: object = fastapi.Depends(get_web_settings),
+) -> starlette.responses.JSONResponse:
+    from ..api.security import resolve_repo_root
+
+    root = resolve_repo_root(payload.path, web_settings)
+    return _json_response(
+        request,
+        {
+            "path": str(root),
+            "name": root.name,
+            "exists": True,
+            "is_dir": True,
+            "file_count": _count_files(root),
         },
     )
 
@@ -312,3 +391,41 @@ async def structure(
 
     snapshot = await _prepare(request, repo, refresh, web_settings, dashboard_settings, cache, health_runner, readme_runner)
     return _json_response(request, to_dict(build_structure(snapshot)))
+
+
+@router.get("/history")
+def history(
+    request: fastapi.Request,
+    repo: str | None = fastapi.Query(default=None, max_length=512),
+    limit: int = fastapi.Query(default=20, ge=1, le=200),
+    web_settings: object = fastapi.Depends(get_web_settings),
+) -> starlette.responses.JSONResponse:
+    from .service import resolve_dashboard_repo, snapshot_key
+    from ..storage import list_snapshots
+
+    repo_key = None
+    if repo and repo.strip():
+        root = resolve_dashboard_repo(repo, web_settings)
+        repo_key = snapshot_key(root)
+    records = list_snapshots(web_settings.db_path, repo_key=repo_key, limit=limit)
+    return _json_response(
+        request,
+        {
+            "history": records,
+            "generated_at": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),
+        },
+    )
+
+
+@router.get("/history/{snapshot_id}")
+def history_detail(
+    request: fastapi.Request,
+    snapshot_id: int = fastapi.Path(ge=1),
+    web_settings: object = fastapi.Depends(get_web_settings),
+) -> starlette.responses.JSONResponse:
+    from ..storage import get_snapshot_with_issues
+
+    record = get_snapshot_with_issues(web_settings.db_path, snapshot_id)
+    if record is None:
+        _raise_api("HISTORY_NOT_FOUND", 404, "历史记录不存在或已被清理")
+    return _json_response(request, {"snapshot": record})

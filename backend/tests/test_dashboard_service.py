@@ -243,6 +243,52 @@ class DashboardServiceTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "REPO_FORBIDDEN")
         self.assertEqual(raised.exception.status_code, 403)
 
+    # T-S08 桌面模式：允许白名单之外的本机绝对目录
+    def test_desktop_mode_allows_outside_absolute_dir(self):
+        outside = self._dir("outside")
+        settings = WebSettings(allowed_repo_roots=(), default_repo=None, desktop_mode=True)
+
+        resolved = resolve_repo_root(str(outside), settings)
+
+        self.assertEqual(resolved, outside)
+
+    # T-S09 桌面模式：拒绝相对路径
+    def test_desktop_mode_rejects_relative_path(self):
+        settings = WebSettings(allowed_repo_roots=(), default_repo=None, desktop_mode=True)
+
+        with self.assertRaises(RepoPathError) as raised:
+            resolve_repo_root("some-project", settings)
+
+        self.assertEqual(raised.exception.code, "INVALID_REPO_PATH")
+
+    # T-S10 桌面模式：拒绝不存在的目录
+    def test_desktop_mode_rejects_missing_dir(self):
+        missing = self.base / "nope"
+        settings = WebSettings(allowed_repo_roots=(), default_repo=None, desktop_mode=True)
+
+        with self.assertRaises(RepoPathError) as raised:
+            resolve_repo_root(str(missing), settings)
+
+        self.assertEqual(raised.exception.code, "REPO_NOT_FOUND")
+
+    # T-S11 桌面模式：拒绝系统敏感目录
+    def test_desktop_mode_rejects_protected_system_dir(self):
+        settings = WebSettings(allowed_repo_roots=(), default_repo=None, desktop_mode=True)
+
+        for bad in (r"C:\Windows\System32", r"C:\Program Files\App", r"C:\Program Files (x86)\Tool"):
+            with self.assertRaises(RepoPathError) as raised:
+                resolve_repo_root(bad, settings)
+            self.assertEqual(raised.exception.code, "REPO_FORBIDDEN")
+
+    # T-S12 桌面模式：拒绝上级目录穿越
+    def test_desktop_mode_rejects_parent_segment(self):
+        settings = WebSettings(allowed_repo_roots=(), default_repo=None, desktop_mode=True)
+
+        with self.assertRaises(RepoPathError) as raised:
+            resolve_repo_root(r"C:\Users\anshuai\..\Windows", settings)
+
+        self.assertEqual(raised.exception.code, "REPO_FORBIDDEN")
+
     # T-S07
     def test_snapshot_key_is_stable_hash(self):
         root = self._dir("repo")

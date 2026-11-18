@@ -24,6 +24,8 @@ from app.api.schemas import error_payload
 from app.api.security import RepoPathError
 from app.api.settings import WebSettings, load_settings_from_env, normalize_settings, settings_summary
 from app.dashboard.router import router as dashboard_router
+from app.fixer.router import router as fixer_router
+from app.storage import init_db
 
 LOGGER = logging.getLogger("repoguard.api.app")
 
@@ -128,7 +130,7 @@ def _mount_static(app: FastAPI, settings: WebSettings) -> None:
         return FileResponse(index_path, media_type="text/html; charset=utf-8")
 
     if settings.static_dir.is_dir():
-        app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
+        app.mount("/", StaticFiles(directory=settings.static_dir), name="static")
 
 
 def _configure_cors(app: FastAPI, settings: WebSettings) -> None:
@@ -154,6 +156,10 @@ def _build_lifespan(settings: WebSettings, gate: ReviewGate):
             len(settings.allowed_repo_roots) - int(summary["allowed_repo_root_count"]),
         )
         try:
+            try:
+                init_db(settings.db_path)
+            except Exception:
+                LOGGER.exception("初始化数据库失败，历史记录功能将不可用")
             yield
         finally:
             gate.shutdown()
@@ -181,6 +187,7 @@ def create_app(settings: WebSettings | None = None) -> FastAPI:
     _register_exception_handlers(app)
     app.include_router(router, prefix="/api")
     app.include_router(dashboard_router, prefix="/api/dashboard")
+    app.include_router(fixer_router, prefix="/api/fixer")
     _mount_static(app, effective_settings)
     _configure_cors(app, effective_settings)
     return app

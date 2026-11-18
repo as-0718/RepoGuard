@@ -45,6 +45,31 @@ def is_absolute_repo_path(value: str) -> bool:
     return value.startswith("/") or bool(_DRIVE_RE.match(value))
 
 
+# 桌面单机模式下禁止巡检的系统敏感顶层目录（不区分盘符与大小写）
+_PROTECTED_TOP_DIRS = {
+    "windows",
+    "program files",
+    "program files (x86)",
+    "programdata",
+}
+
+
+def _is_protected_system_dir(candidate: Path) -> bool:
+    """判断候选目录是否为盘根或位于系统敏感顶层目录之内。"""
+    try:
+        real = candidate.resolve(strict=False)
+    except OSError:
+        return True
+    if real.parent == real:  # 盘根目录，如 C:\
+        return True
+    parts = [part.casefold() for part in real.parts]
+    # parts 形如 ('C:\\', 'Windows', 'System32', ...)，取盘符之后的第一层目录
+    for part in parts[1:2]:
+        if part in _PROTECTED_TOP_DIRS:
+            return True
+    return False
+
+
 def is_within_allowed_roots(candidate: Path, settings: WebSettings) -> bool:
     if not settings.allowed_repo_roots:
         return False
@@ -75,14 +100,33 @@ def resolve_repo_root(raw: str, settings: WebSettings) -> Path:
     if has_control_chars(text) or "://" in text:
         raise RepoPathError("INVALID_REPO_PATH", 400, "仓库路径格式不合法")
     if has_parent_segment(text):
-        raise RepoPathError("REPO_FORBIDDEN", 403, "不允许访问仓库白名单之外的路径")
+        raise RepoPathError("REPO_FORBIDDEN", 403, "不允许访问包含上级目录跳转的路径")
     if is_device_or_unc_path(text):
-        raise RepoPathError("REPO_FORBIDDEN", 403, "不允许访问仓库白名单之外的路径")
+        raise RepoPathError("REPO_FORBIDDEN", 403, "不允许访问设备路径或网络路径")
+
+    token = text.rstrip("/\\")
+
+    # 桌面单机模式：允许本机任意存在的目录，仅排除系统敏感目录，不再受启动白名单限制。
+    if getattr(settings, "desktop_mode", False):
+        if not is_absolute_repo_path(token):
+            raise RepoPathError(
+                "INVALID_REPO_PATH",
+                400,
+                "请填写仓库的绝对路径",
+                "例如 C:\\Users\\你\\Desktop\\my-project",
+            )
+        candidate = Path(token)
+        candidate_real = candidate.resolve(strict=False)
+        if _is_protected_system_dir(candidate_real):
+            raise RepoPathError("REPO_FORBIDDEN", 403, "不允许访问系统敏感目录")
+        if not candidate_real.exists() or not candidate_real.is_dir():
+            raise RepoPathError("REPO_NOT_FOUND", 404, "仓库目录不存在或不是目录")
+        return candidate_real
+
     if not settings.allowed_repo_roots:
         raise RepoPathError("REPO_FORBIDDEN", 403, "当前没有配置可用的仓库目录")
 
     candidate: Path
-    token = text.rstrip("/\\")
     default_token = (settings.default_repo or "").strip().rstrip("/\\")
     if default_token and token.casefold() == default_token.casefold():
         default_root = default_repo_root(settings)

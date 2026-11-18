@@ -9,6 +9,7 @@ import ErrorBanner from '../components/ErrorBanner.vue'
 import FilterBar from '../components/FilterBar.vue'
 import KpiCard from '../components/KpiCard.vue'
 import LoadingSkeleton from '../components/LoadingSkeleton.vue'
+import FixPreviewDialog from '../components/FixPreviewDialog.vue'
 
 const DEFAULT_PAGE_SIZE = 20
 const MAX_KEYWORD_LENGTH = 64
@@ -354,6 +355,7 @@ onBeforeUnmount(() => {
             <dt>片段</dt>
             <dd>{{ row.excerpt || '—' }}</dd>
           </dl>
+          <FixPreviewDialog :issue="row" :repo-id="repoId" @applied="load" />
         </template>
       </DataTable>
     </template>

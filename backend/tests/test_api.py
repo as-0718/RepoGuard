@@ -250,7 +250,7 @@ class ApiTestBase(unittest.TestCase):
         data = response.json()
         self.assertEqual(
             set(data),
-            {"status", "service", "version", "engine", "default_repo", "allowed_repo_root_count", "time"},
+            {"status", "service", "version", "engine", "database", "default_repo", "allowed_repo_root_count", "time"},
         )
         self.assertEqual(data["status"], "ok")
         self.assertEqual(data["service"], "repoguard-web-api")

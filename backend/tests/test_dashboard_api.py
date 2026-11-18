@@ -188,12 +188,13 @@ class DashboardApiTests(unittest.TestCase):
         self.readme_calls.append(repo_root)
         return self.readme_report
 
-    def _make_app(self, *, roots=None, default: str | None = None):
+    def _make_app(self, *, roots=None, default: str | None = None, desktop: bool = False):
         root_tuple = (self.root,) if roots is None else tuple(roots)
         settings = WebSettings(
             allowed_repo_roots=root_tuple,
             default_repo=self.root.name if default is None else default,
             static_dir=self.root,
+            desktop_mode=desktop,
         )
         app = create_app(settings)
         app.state.dashboard_settings = DashboardSettings()
@@ -226,6 +227,42 @@ class DashboardApiTests(unittest.TestCase):
         self.assertNotIn("C:\\Users", text)
         self.assertNotIn("/home/", text)
         self.assertNotRegex(text, r"[A-Za-z]:[\\/]")
+
+    # T-A03b 桌面模式：check-repo 校验通过并返回文件数
+    def test_check_repo_success_desktop(self):
+        app = self._make_app(desktop=True)
+        client = WebhookASGIClient(app)
+
+        response = client.post("/api/dashboard/check-repo", json={"path": str(self.root)})
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["name"], self.root.name)
+        self.assertTrue(body["exists"])
+        self.assertTrue(body["is_dir"])
+        self.assertGreaterEqual(body["file_count"], 3)
+
+    # T-A03c 桌面模式：check-repo 拒绝不存在的目录
+    def test_check_repo_missing_dir(self):
+        app = self._make_app(desktop=True)
+        client = WebhookASGIClient(app)
+        missing = self.root / "nope"
+
+        response = client.post("/api/dashboard/check-repo", json={"path": str(missing)})
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["error"]["code"], "REPO_NOT_FOUND")
+
+    # T-A03d 非桌面模式：check-repo 拒绝白名单外路径
+    def test_check_repo_forbidden_outside_root(self):
+        outside = Path(self.temp_dir).parent / "repoguard-outside-xyz"
+        outside.mkdir(exist_ok=True)
+        self.addCleanup(shutil.rmtree, str(outside), True)
+
+        response = self.client.post("/api/dashboard/check-repo", json={"path": str(outside)})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"]["code"], "REPO_FORBIDDEN")
 
     # T-A03
     def test_overview_success_has_all_required_fields(self):

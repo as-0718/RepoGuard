@@ -2,6 +2,8 @@
 import { computed, onMounted, provide, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { listRepos } from '@api/dashboard.js'
+import { getStoredRepo, setStoredRepo } from '@api/repoStore.js'
+import ThemeToggle from './ThemeToggle.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -16,7 +18,7 @@ const snapshotMeta = ref(null)
 
 const repoId = computed(() => {
   const fromQuery = typeof route.query.repo === 'string' ? route.query.repo : ''
-  return fromQuery || defaultRepo.value
+  return fromQuery || getStoredRepo() || defaultRepo.value
 })
 
 const meta = computed(() => snapshotMeta.value || {})
@@ -35,6 +37,7 @@ function setSnapshotMeta(next) {
 }
 
 function setRepo(nextRepo) {
+  setStoredRepo(nextRepo)
   router.replace({
     query: {
       ...route.query,
@@ -77,8 +80,9 @@ async function loadRepos() {
 }
 
 watch([repos, defaultRepo], () => {
-  if (!repos.value.length || !defaultRepo.value) return
   if (typeof route.query.repo === 'string' && route.query.repo) return
+  if (getStoredRepo()) return
+  if (!repos.value.length || !defaultRepo.value) return
   router.replace({ query: { ...route.query, repo: defaultRepo.value } })
 })
 
@@ -98,10 +102,13 @@ onMounted(loadRepos)
           <RouterLink to="/overview" aria-current-value="page">总览</RouterLink>
           <RouterLink to="/issues" aria-current-value="page">问题明细</RouterLink>
           <RouterLink to="/structure" aria-current-value="page">结构/README</RouterLink>
+          <RouterLink to="/history" aria-current-value="page">历史记录</RouterLink>
           <RouterLink to="/about" aria-current-value="page">关于/健康</RouterLink>
         </nav>
 
         <div class="header-tools">
+          <ThemeToggle />
+
           <label for="repo-select">仓库</label>
           <select
             id="repo-select"
@@ -115,6 +122,7 @@ onMounted(loadRepos)
             </option>
           </select>
 
+          <button type="button" @click="router.push('/select')">更换仓库</button>
           <button type="button" :disabled="requesting || !repoId" @click="requestRefresh">
             刷新
           </button>

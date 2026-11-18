@@ -46,6 +46,21 @@ export function getStructure({ repo, refresh, signal } = {}) {
   })
 }
 
+export function getHistory({ repo, limit = 20, signal } = {}) {
+  return requestJson('/api/dashboard/history', {
+    params: { repo, limit },
+    signal,
+  })
+}
+
+export function getHistoryDetail({ id, signal } = {}) {
+  return requestJson(`/api/dashboard/history/${id}`, { signal })
+}
+
+export function checkRepo({ path, signal } = {}) {
+  return requestJson('/api/dashboard/check-repo', { method: 'POST', body: { path }, signal })
+}
+
 export function getHealth({ signal } = {}) {
   return requestJson('/api/health', { signal })
 }

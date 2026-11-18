@@ -1,7 +1,7 @@
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts/core'
-import { BarChart, PieChart, HeatmapChart } from 'echarts/charts'
+import { BarChart, LineChart, PieChart, HeatmapChart } from 'echarts/charts'
 import {
   GridComponent,
   TooltipComponent,
@@ -11,9 +11,12 @@ import {
   AriaComponent,
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
+import { themeRef } from '../api/theme.js'
+import { themedOption } from '../api/chartTheme.js'
 
 echarts.use([
   BarChart,
+  LineChart,
   PieChart,
   HeatmapChart,
   GridComponent,
@@ -47,6 +50,10 @@ function withAria(option) {
   return { ...option, aria: { enabled: true, decal: { show: true } } }
 }
 
+function resolveOption() {
+  return withAria(themedOption(props.option))
+}
+
 function handleClick(params) {
   emit('chart-click', {
     name: params?.name,
@@ -65,7 +72,7 @@ function ensureObserver() {
 function ensureInit() {
   if (chart || props.empty || !el.value) return
   chart = echarts.init(el.value, null, { renderer: 'canvas' })
-  if (props.option) chart.setOption(withAria(props.option), { notMerge: true })
+  if (props.option) chart.setOption(resolveOption(), { notMerge: true })
   chart.on('click', handleClick)
   ensureObserver()
 }
@@ -97,10 +104,14 @@ watch(
       return
     }
     ensureInit()
-    chart?.setOption(withAria(option), { notMerge: true, lazyUpdate: true })
+    chart?.setOption(resolveOption(), { notMerge: true, lazyUpdate: true })
   },
   { deep: true },
 )
+
+watch(themeRef, () => {
+  if (chart && !props.empty) chart.setOption(resolveOption(), { notMerge: true, lazyUpdate: true })
+})
 
 watch(
   () => props.empty,

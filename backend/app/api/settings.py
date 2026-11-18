@@ -22,6 +22,9 @@ REVIEW_CONCURRENCY_ENV: str = "REPOGUARD_REVIEW_MAX_CONCURRENCY"
 QUEUE_TIMEOUT_ENV: str = "REPOGUARD_QUEUE_TIMEOUT_SECONDS"
 CORS_ORIGINS_ENV: str = "REPOGUARD_CORS_ORIGINS"
 STATIC_DIR_ENV: str = "REPOGUARD_STATIC_DIR"
+DB_PATH_ENV: str = "REPOGUARD_DB_PATH"
+DESKTOP_MODE_ENV: str = "REPOGUARD_DESKTOP_MODE"
+DEFAULT_DB_PATH: Path = PROJECT_ROOT / "data" / "repoguard.db"
 
 LOGGER = logging.getLogger("repoguard.api.settings")
 
@@ -38,6 +41,8 @@ class WebSettings:
     queue_timeout_seconds: float = 5.0
     cors_origins: tuple[str, ...] = ()
     static_dir: Path = DEFAULT_STATIC_DIR
+    db_path: Path = DEFAULT_DB_PATH
+    desktop_mode: bool = False
 
 
 def default_settings() -> WebSettings:
@@ -101,6 +106,20 @@ def _clamp_float(value: object, default: float, low: float, high: float, name: s
     return number
 
 
+def _clamp_bool(value: object, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().casefold()
+    if text in ("1", "true", "on", "yes", "y", "是"):
+        return True
+    if text in ("0", "false", "off", "no", "n", "否", ""):
+        return False
+    LOGGER.warning("配置项 %s 不是合法布尔值，已使用默认值", DESKTOP_MODE_ENV)
+    return default
+
+
 def _valid_origin(origin: str) -> bool:
     if not origin or origin == "*" or "://" not in origin:
         return False
@@ -158,6 +177,8 @@ def normalize_settings(settings: WebSettings) -> WebSettings:
         ),
         cors_origins=tuple(origins),
         static_dir=Path(settings.static_dir),
+        db_path=Path(settings.db_path),
+        desktop_mode=settings.desktop_mode,
     )
 
 
@@ -187,9 +208,20 @@ def load_settings_from_env(env: Mapping[str, str] | None = None) -> WebSettings:
     else:
         static_dir = DEFAULT_STATIC_DIR
 
+    db_raw = source.get(DB_PATH_ENV)
+    if db_raw:
+        db_path = Path(db_raw).expanduser()
+        if not db_path.is_absolute():
+            db_path = PROJECT_ROOT / db_path
+    else:
+        db_path = DEFAULT_DB_PATH
+
+    desktop_mode = _clamp_bool(source.get(DESKTOP_MODE_ENV), False)
+
     settings = WebSettings(
         allowed_repo_roots=roots,
         default_repo=default_repo,
+        desktop_mode=desktop_mode,
         max_manifest_chars=_clamp_int(
             source.get(MAX_MANIFEST_CHARS_ENV, defaults.max_manifest_chars),
             defaults.max_manifest_chars, 1, 2_000_000, "max_manifest_chars",
@@ -216,6 +248,7 @@ def load_settings_from_env(env: Mapping[str, str] | None = None) -> WebSettings:
         ),
         cors_origins=cors_origins,
         static_dir=static_dir,
+        db_path=db_path,
     )
     return normalize_settings(settings)
 

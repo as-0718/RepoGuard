@@ -6,6 +6,17 @@
     <meta name="referrer" content="no-referrer" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>RepoGuard 只读看板</title>
+    <script>
+      // 挂载前先按记忆设置主题，避免深色/浅色闪烁；默认深色
+      ;(function () {
+        try {
+          var t = localStorage.getItem('repoguard.theme')
+          document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark'
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark'
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="app">

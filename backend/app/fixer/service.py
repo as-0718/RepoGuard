@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import datetime as _dt
+import logging
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -21,6 +23,87 @@ from .schemas import BackupInput, IssueInput, SelectionInput
 
 MAX_SELECTIONS = 200
 STALE_REASON = "文件内容已变化，补丁已过期"
+
+LOGGER = logging.getLogger("repoguard.fixer.service")
+
+
+def _unique_files(items: list[dict[str, object]]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        fp = item.get("file_path") if isinstance(item, dict) else None
+        if isinstance(fp, str) and fp and fp not in seen:
+            seen.add(fp)
+            out.append(fp)
+    return out
+
+
+def _event_result(primary: int, secondary: int) -> str:
+    if primary > 0 and secondary == 0:
+        return "success"
+    if primary > 0:
+        return "partial"
+    return "failed"
+
+
+def _file_entries(repo_root: Path, file_paths: list[str]) -> list[dict[str, str]]:
+    """收集被改文件路径及其保存时间（mtime）；取不到时间时留空字符串。"""
+    seen: set[str] = set()
+    entries: list[dict[str, str]] = []
+    for fp in file_paths:
+        if not fp or fp in seen:
+            continue
+        seen.add(fp)
+        mtime = ""
+        try:
+            source = paths.resolve_file(repo_root, fp)
+            if source.exists():
+                mtime = (
+                    _dt.datetime.fromtimestamp(source.stat().st_mtime, _dt.timezone.utc)
+                    .replace(microsecond=0)
+                    .isoformat()
+                )
+        except OSError:
+            mtime = ""
+        entries.append({"path": fp, "mtime": mtime})
+    return entries
+
+
+def _record_fix_event(
+    db_path: Path | str | None,
+    *,
+    label: str,
+    action: str,
+    result: str,
+    applied: int = 0,
+    skipped: int = 0,
+    restored: int = 0,
+    failed: int = 0,
+    files: list[dict[str, str]] | list[str] | None = None,
+    duration_ms: int = 0,
+    request_id: str = "",
+) -> None:
+    """落库修复/回滚事件；库不可用或写入失败时内部降级，不抛出异常。"""
+    if not db_path:
+        return
+    try:
+        from ..storage import record_fix_event
+
+        record_fix_event(
+            db_path,
+            repo_label=label,
+            action=action,
+            result=result,
+            applied_count=applied,
+            skipped_count=skipped,
+            restored_count=restored,
+            failed_count=failed,
+            files=files or [],
+            duration_ms=duration_ms,
+            request_id=request_id,
+        )
+    except Exception:
+        LOGGER.exception("写入修复事件失败，已降级为仅日志记录")
 
 
 def preview(repo_root: Path, issues: list[IssueInput], *, strict: bool) -> dict[str, object]:
@@ -53,6 +136,7 @@ def apply(
     on_stale: str,
     strict: bool,
     request_id: str,
+    db_path: Path | str | None = None,
 ) -> dict[str, object]:
     started = time.perf_counter()
     label = paths.repo_label(repo_root)
@@ -66,8 +150,8 @@ def apply(
         if key in seen:
             raise_fixer(FIXER_INVALID_SELECTION, 400, "存在重复的补丁定位")
         seen.add(key)
-        if selection.rule_id != "link-005":
-            raise_fixer(FIXER_INVALID_SELECTION, 400, "只允许处理 link-005")
+        if selection.rule_id not in patches.FIXABLE_RULES:
+            raise_fixer(FIXER_INVALID_SELECTION, 400, "所选规则不在自动修复白名单")
 
     rebuilt: list[tuple[SelectionInput, Patch]] = []
     skipped: list[dict[str, object]] = []
@@ -102,13 +186,24 @@ def apply(
 
     if not rebuilt:
         result = ApplyResult(repo=label, backup_id="", applied=[], skipped=skipped, backups=[])
+        duration_ms = int((time.perf_counter() - started) * 1000)
         audit.audit(
             "apply",
             request_id=request_id,
             repo_label=label,
             files=[],
             result=f"applied=0 skipped={len(skipped)}",
-            duration_ms=int((time.perf_counter() - started) * 1000),
+            duration_ms=duration_ms,
+        )
+        _record_fix_event(
+            db_path,
+            label=label,
+            action="apply",
+            result="failed",
+            skipped=len(skipped),
+            files=[],
+            duration_ms=duration_ms,
+            request_id=request_id,
         )
         return to_dict(result)  # type: ignore[return-value]
 
@@ -122,6 +217,7 @@ def apply(
                 skipped,
                 request_id,
                 started,
+                db_path,
             )
     except locks.LockTimeout:
         raise_fixer(FIXER_IO_ERROR, 503, "当前仓库有写操作正在进行，请稍后重试")
@@ -136,6 +232,7 @@ def _apply_locked(
     skipped: list[dict[str, object]],
     request_id: str,
     started: float,
+    db_path: Path | str | None = None,
 ) -> ApplyResult:
     backup_id = backup.new_backup_id(backup_dir)
     backup_root = backup_dir / backup_id
@@ -215,13 +312,25 @@ def _apply_locked(
                 }
             )
 
+    duration_ms = int((time.perf_counter() - started) * 1000)
     audit.audit(
         "apply",
         request_id=request_id,
         repo_label=label,
         files=audit_files,
         result=f"applied={len(applied)} skipped={len(skipped)}",
-        duration_ms=int((time.perf_counter() - started) * 1000),
+        duration_ms=duration_ms,
+    )
+    _record_fix_event(
+        db_path,
+        label=label,
+        action="apply",
+        result=_event_result(len(applied), len(skipped)),
+        applied=len(applied),
+        skipped=len(skipped),
+        files=_file_entries(repo_root, _unique_files(applied)),
+        duration_ms=duration_ms,
+        request_id=request_id,
     )
     return ApplyResult(
         repo=label,
@@ -241,6 +350,7 @@ def rollback(
     force: bool,
     strict: bool,
     request_id: str,
+    db_path: Path | str | None = None,
 ) -> dict[str, object]:
     started = time.perf_counter()
     label = paths.repo_label(repo_root)
@@ -298,12 +408,24 @@ def rollback(
     except locks.LockTimeout:
         raise_fixer(FIXER_IO_ERROR, 503, "当前仓库有写操作正在进行，请稍后重试")
 
+    duration_ms = int((time.perf_counter() - started) * 1000)
     audit.audit(
         "rollback",
         request_id=request_id,
         repo_label=label,
         files=audit_files,
         result=f"restored={len(restored)} failed={len(failed)}",
-        duration_ms=int((time.perf_counter() - started) * 1000),
+        duration_ms=duration_ms,
+    )
+    _record_fix_event(
+        db_path,
+        label=label,
+        action="rollback",
+        result=_event_result(len(restored), len(failed)),
+        restored=len(restored),
+        failed=len(failed),
+        files=_file_entries(repo_root, _unique_files(restored)),
+        duration_ms=duration_ms,
+        request_id=request_id,
     )
     return to_dict(RollbackResult(repo=label, restored=restored, failed=failed))  # type: ignore[return-value]

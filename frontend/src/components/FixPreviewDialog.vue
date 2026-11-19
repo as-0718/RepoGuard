@@ -19,8 +19,10 @@ const applyResult = ref(null)
 const rollbackResult = ref(null)
 const fixerAvailable = ref(typeof window !== 'undefined' && Boolean(window.repoguard?.pickDirectory))
 
-const canShow = computed(() => props.issue?.rule_id === 'link-005' && fixerAvailable.value)
-const showHint = computed(() => props.issue?.rule_id === 'link-005' && !fixerAvailable.value)
+const FIXABLE_RULES = ['link-005', 'code-012', 'code-010']
+const ruleFixable = computed(() => FIXABLE_RULES.includes(props.issue?.rule_id))
+const canShow = computed(() => ruleFixable.value && fixerAvailable.value)
+const showHint = computed(() => ruleFixable.value && !fixerAvailable.value)
 const patches = computed(() => (Array.isArray(preview.value?.patches) ? preview.value.patches : []))
 const fixablePatches = computed(() => patches.value.filter((patch) => patch.fixable))
 
@@ -49,7 +51,7 @@ async function openDialog() {
         {
           file_path: props.issue.file_path,
           line_no: props.issue.line_no,
-          rule_id: 'link-005',
+          rule_id: props.issue.rule_id,
           excerpt: props.issue.excerpt || '',
         },
       ],
@@ -119,6 +121,7 @@ async function rollbackApplied() {
       force: false,
       strict: false,
     })
+    emit('applied')
   } catch (err) {
     fail(err)
   } finally {
@@ -156,7 +159,7 @@ function diffLabel(line) {
   <div v-if="open" class="fixer-backdrop" @click.self="open = false">
     <section class="fixer-dialog" role="dialog" aria-modal="true" aria-labelledby="fixer-title">
       <header class="fixer-head">
-        <h2 id="fixer-title">link-005 修复预览</h2>
+        <h2 id="fixer-title">{{ issue.rule_id }} 修复预览</h2>
         <button type="button" class="btn" @click="open = false">关闭</button>
       </header>
 

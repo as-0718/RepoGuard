@@ -99,6 +99,7 @@ async def apply(
         on_stale=payload.on_stale,
         strict=payload.strict,
         request_id=_request_id(request),
+        db_path=settings.db_path,
     )
     return starlette.responses.JSONResponse(content=result, media_type="application/json; charset=utf-8")
 
@@ -127,5 +128,6 @@ async def rollback(
         force=payload.force,
         strict=payload.strict,
         request_id=_request_id(request),
+        db_path=settings.db_path,
     )
     return starlette.responses.JSONResponse(content=result, media_type="application/json; charset=utf-8")

@@ -14,7 +14,7 @@ from ..api.security import (
     is_device_or_unc_path,
     resolve_repo_root,
 )
-from ..api.settings import WebSettings
+from ..api.settings import WebSettings, default_repo_root
 
 from .errors import (
     FIXER_BACKUP_DIR_FORBIDDEN,
@@ -53,7 +53,33 @@ def is_symlink(path: Path) -> bool:
         return False
 
 
+def _map_identity_to_root(token: str, settings: WebSettings) -> Path | None:
+    """把仓库标识（目录名 / 默认仓库名）映射到已配置的仓库根目录。
+
+    前端在默认仓库下拉里传的是仓库标识（如 ``demo-repo``），而自选目录传的是
+    绝对路径。这里先按标识匹配白名单根目录；匹配不到时返回 None，交由
+    :func:`resolve_repo_root` 走原始绝对路径校验与报错口径。
+    """
+    candidate = token.strip().rstrip("/\\")
+    if not candidate or is_absolute_repo_path(candidate):
+        return None
+    folded = candidate.casefold()
+    for root in settings.allowed_repo_roots:
+        try:
+            if root.name.casefold() == folded and root.is_dir():
+                return root.resolve()
+        except OSError:
+            continue
+    default_root = default_repo_root(settings)
+    if default_root is not None and default_root.name.casefold() == folded:
+        return default_root
+    return None
+
+
 def resolve_repo(raw: str, settings: WebSettings) -> Path:
+    mapped = _map_identity_to_root(raw, settings)
+    if mapped is not None:
+        return mapped
     return resolve_repo_root(raw, settings)
 
 

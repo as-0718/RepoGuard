@@ -132,6 +132,51 @@ class FixerApiTests(unittest.TestCase):
         self.assertFalse(any(item["fixable"] for item in patches))
         self.assertTrue(all(item["reason"] for item in patches))
 
+    def test_preview_code012_none_compare_rewrite(self) -> None:
+        self._write("backend/app/a.py", "if value == None:\n    return \"\"\nif value != None:\n    return str(value)\n")
+        response = self._preview(
+            [
+                self._issue("backend/app/a.py", line_no=1, rule_id="code-012"),
+                self._issue("backend/app/a.py", line_no=3, rule_id="code-012"),
+            ]
+        )
+        self.assertEqual(response.status_code, 200)
+        patches = response.json()["patches"]
+        self.assertTrue(all(item["fixable"] for item in patches))
+        self.assertIn("is None", patches[0]["new_line"])
+        self.assertNotIn("== None", patches[0]["new_line"])
+        self.assertIn("is not None", patches[1]["new_line"])
+        self.assertNotIn("!= None", patches[1]["new_line"])
+
+    def test_preview_code012_already_is_none_not_fixable(self) -> None:
+        self._write("backend/app/a.py", "if value is None:\n    return \"\"\n")
+        response = self._preview([self._issue("backend/app/a.py", rule_id="code-012")])
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["patches"][0]["fixable"])
+
+    def test_preview_code010_debug_break_commented_out(self) -> None:
+        self._write("backend/app/b.py", "def foo():\n    breakpoint()\n    return 1\n")
+        response = self._preview([self._issue("backend/app/b.py", line_no=2, rule_id="code-010")])
+        self.assertEqual(response.status_code, 200)
+        patch = response.json()["patches"][0]
+        self.assertTrue(patch["fixable"])
+        self.assertTrue(patch["new_line"].lstrip().startswith("#"))
+        self.assertIn("breakpoint()", patch["new_line"])
+
+    def test_apply_code012_then_rollback(self) -> None:
+        path = self._write("backend/app/a.py", "if value == None:\n    return \"\"\n")
+        original = path.read_bytes()
+        applied = self._apply(
+            [self._selection("backend/app/a.py", "if value == None:", rule_id="code-012")]
+        )
+        self.assertEqual(applied.status_code, 200)
+        body = applied.json()
+        self.assertEqual(len(body["applied"]), 1)
+        self.assertIn("is None", path.read_text(encoding="utf-8"))
+        restored = self._rollback(body["backup_id"], body["backups"])
+        self.assertEqual(restored.status_code, 200)
+        self.assertEqual(path.read_bytes(), original)
+
     def test_preview_non_whitelisted_rule_not_fixable(self) -> None:
         self._write("docs/plain.md", "[x](./a b.md)\n")
         response = self._preview([self._issue("docs/plain.md", rule_id="link-001")])
@@ -139,6 +184,25 @@ class FixerApiTests(unittest.TestCase):
         patch = response.json()["patches"][0]
         self.assertFalse(patch["fixable"])
         self.assertIn("非白名单", patch["reason"])
+
+    def test_preview_accepts_repo_identity_name(self) -> None:
+        # 前端默认/下拉仓库传的是仓库标识（目录名），后端应映射到已配置根目录。
+        self._write("docs/a.md", "[x](./a b.md)\n")
+        body = {"repo": self.repo.name, "issues": [self._issue("docs/a.md")], "strict": False}
+        with no_network():
+            response = self.client.post("/api/fixer/preview", json=body)
+        self.assertEqual(response.status_code, 200)
+        patches = response.json()["patches"]
+        self.assertEqual(len(patches), 1)
+        self.assertTrue(patches[0]["fixable"])
+
+    def test_preview_rejects_unknown_repo_identity(self) -> None:
+        # 既非白名单目录名、也不是默认仓库的标识，仍按原口径拒绝。
+        body = {"repo": "no-such-repo", "issues": [self._issue("docs/a.md")], "strict": False}
+        with no_network():
+            response = self.client.post("/api/fixer/preview", json=body)
+        self.assertIn(response.status_code, (400, 404))
+        self.assertEqual(response.json()["error"]["code"], "INVALID_REPO_PATH")
 
     def test_preview_rejects_file_path_outside_repo(self) -> None:
         for file_path in ("../outside.md", str(self.base / "outside.md")):

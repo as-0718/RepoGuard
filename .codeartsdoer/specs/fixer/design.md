@@ -83,7 +83,7 @@ def resolve_repo_root(raw: str, settings: WebSettings) -> Path
 
 fixer 的约束：
 - 调用后只拿 `Path`；对外只输出 `repo_label`。
-- 桌面模式下 `repo` 必须是绝对路径（`security.py:111-117`）；前端从看板当前仓库绝对路径传入，符合桌面壳的实际调用方式。
+- 桌面模式下 `repo` 可为绝对路径，或仓库标识（白名单目录名 / 默认仓库名）；后端先按标识映射根目录，未命中再走 `resolve_repo_root()` 绝对路径校验（`security.py:111-117`）。前端自选目录传绝对路径，默认/下拉仓库传标识，与看板口径一致。
 - 非桌面模式 fixer 端点 404，不进入该分支。
 
 ## 2.2 `link_check` 的 link-005 覆盖口径
@@ -171,7 +171,7 @@ fixer 再 +2/-0 后：当前 196 行，相对 `app.py.orig` 为 `+10/-1`。这�
 - 可参考但**不导入私有函数**：`_raise_api`（33-36）、`_json_response`（95-105）、`_prepare`（167-247）均为 dashboard 包私有实现。
 - fixer 自建 `_raise_api` 等价封装（运行期导入 `ApiError`）与 `_json_response`（仅 `JSONResponse`，头部交给中间件）。
 - `get_web_settings`（39-43）的等价逻辑在 fixer 内重建：从 `request.app.state.settings` 读取；缺失 → `INTERNAL_ERROR` 500。
-- `resolve_dashboard_repo`（`dashboard/service.py:204-216`）依赖 `list_repos`，桌面模式下 `allowed_repo_roots` 可能为空；fixer 直接使用 `resolve_repo_root`，不依赖 dashboard 令牌映射。
+- `resolve_dashboard_repo`（`dashboard/service.py:204-216`）的标识→根目录映射口径被 fixer 复用：`resolve_repo` 先在 `allowed_repo_roots` / `default_repo` 按目录名匹配，未命中再调用 `resolve_repo_root`；fixer 不跨包依赖 `list_repos`，映射在 paths 层内联实现。
 - `snapshot_key`（`dashboard/service.py:219-221`）可用于稳定哈希；fixer 的 `repo_label` 采用 `root.name` + 短哈希（见 6.2），不跨包调用。
 
 ---
@@ -309,7 +309,7 @@ Pydantic 模型（沿用既有 `pydantic`，不新增依赖）：
 
 ### 4.2.5 `paths.py`
 
-1. `resolve_repo(raw, settings)`：直接调用 `app.api.security.resolve_repo_root`；返回 `Path`。
+1. `resolve_repo(raw, settings)`：先按标识映射 `allowed_repo_roots` / 默认仓库根目录；未命中再调用 `app.api.security.resolve_repo_root`；返回 `Path`。
 2. `resolve_file(repo_root, relative)`：
    - 拒绝绝对路径、盘符、UNC、设备路径、`..`（复用 `security.py:31-45` 的 helper）。
    - `candidate = (repo_root / relative).resolve(strict=False)`。
@@ -790,7 +790,7 @@ State：
 | A-05 | `repo_label` 使用 `name-8hex` | spec 8.3 只写"相对名/标识" | 短哈希用于避免同名冲突；不回传绝对路径 |
 | A-06 | `IssuesView.vue` 已 368 行 | 增加入口可能超 400 行 | 触发按钮放入 `FixPreviewDialog`，IssuesView 仅加 import + 一行模板 |
 | A-07 | `client.js` 默认 45s | apply 可能耗时 | `api/fixer.js` 显式 60s，不改 `client.js` |
-| A-08 | desktop_mode 下 `repo` 必须绝对路径（`security.py:110-117`） | 前端需传当前仓库绝对路径 | 设计明确桌面模式传绝对路径；非桌面 404 |
+| A-08 | desktop_mode 下 `resolve_repo_root` 要求绝对路径（`security.py:110-117`） | 前端默认/下拉仓库传的是标识而非路径，直接进校验会 `INVALID_REPO_PATH` | **已修订（#65）**：`resolve_repo` 先做标识→根目录映射，未命中再走绝对路径校验；非桌面 404 |
 | A-09 | `link_check.extract_links()` 的 `raw` 截断 60、无列偏移 | 不能直接用于替换 | 用 `INLINE_RE`/`DEFINITION_RE` 重新定位；`extract_links` 仅做 kind/wrapped 判定 |
 | A-10 | `link_check` 的 definition target 解析丢弃 title（`link_check.py:121-137`） | 修复需保留 title | `patches.py` 自行拆分 target/title，测试锁定 |
 | A-11 | 备份目录必须已存在（不自动创建） | 用户需先建目录 | service 校验存在/可写，否则 403 |
@@ -849,6 +849,11 @@ State：
    - **采纳结论：已澄清。** spec 10.2 已补“查看修复触发按钮可并入 `FixPreviewDialog.vue`，`IssuesView` 仅做 import 与模板挂载，不承载按钮/弹窗逻辑”。
    - spec 落点：10.2。
 
-**结论：以上六项均已闭合，design 与 spec 无剩余未闭合口径冲突。**
+7. **S-07 桌面模式 `repo` 标识映射（#65 修订，已闭合）**
+   - 背景：桌面壳实测默认/下拉仓库传给 fixer 的是仓库标识（`demo-repo`），而 `resolve_repo_root` 在 desktop_mode 下只认绝对路径，preview 返回 `INVALID_REPO_PATH`；S-04 原结论“桌面必须传绝对路径”与前端实际取值不符。
+   - **采纳结论：已修订。** `paths.resolve_repo` 先按标识在 `allowed_repo_roots` / `default_repo` 映射根目录，未命中再走 `resolve_repo_root` 绝对路径校验；前端契约不动，安全校验仍在后端。spec 3.1 / 3.2、tasks T02 口径已同步，新增两条用例覆盖标识命中与未知标识拒绝。
+   - spec 落点：3.1、3.2、9.2。
+
+**结论：以上七项均已闭合，design 与 spec 无剩余未闭合口径冲突。**
 
 以上 1–3 项会影响验收数字/错误码，必须在 tasks 前回 spec；4–6 为口径澄清，不阻塞实现。

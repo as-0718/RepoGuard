@@ -218,7 +218,7 @@ graph TD
   def is_symlink(path: Path) -> bool
   ```
 - **执行步骤**：
-  - [ ] 1. `resolve_repo` 直接调用 `app.api.security.resolve_repo_root`，不重写白名单逻辑。
+  - [ ] 1. `resolve_repo` 先把仓库标识映射到 `allowed_repo_roots` / 默认仓库根目录，未命中再调用 `app.api.security.resolve_repo_root`；不重写白名单与归属校验逻辑。
   - [ ] 2. `resolve_file` 复用 `security.py:31-45` 的 helper 拒绝绝对路径/盘符/UNC/设备/`..`；`resolve` 后用 `commonpath` 校验在仓库根内；符号链接 → `FIXER_INVALID_SELECTION` 400。
   - [ ] 3. `resolve_backup_dir` 校验绝对路径、存在、目录、可写、非系统敏感目录（复用 `security.py:57-70` 的等价口径）、解析后不在仓库根内；不自动创建。
   - [ ] 4. `resolve_backup_path` 只接受相对路径，解析后必须位于 `backup_root` 内；符号链接 → `FIXER_BACKUP_PATH_FORBIDDEN` 403。
@@ -589,12 +589,21 @@ graph TD
   - [x] 1. 核对 `desktop/main/main.js:16` 的 `ipcMain.handle('repoguard:pick-directory', ...)` 与 `desktop/main/preload.js:6-7` 的 `contextBridge.exposeInMainWorld('repoguard', { pickDirectory })`。静态核对通过：IPC 与 preload 暴露均在。
   - [x] 2. 核对 `desktop/main/main.js` 与 `preload.js` 零二次改动。静态核对通过：壳文件随 `cb3420c` 整体落地，fixer 阶段未叠加修改。
   - [x] 3. 核对 `desktop/package.json`/lock 未变；无新增 IPC 名称。静态核对通过：IPC 仅 `repoguard:pick-directory` 一个，无 Electron 依赖版本变化。
-  - [ ] **SKIP** 4. 手工验收清单（在桌面壳内）：按钮出现/取消选择/仓库内目录被拒/非桌面降级/diff 键盘操作/apply 后复扫提示/rollback 成功与冲突提示。
+  - [ ] 4. 手工验收清单（开发态真实壳复验 2026-11-19，`REPOGUARD_DESKTOP_MODE=0`）：
+    - [x] 4.1 按钮出现：code-010 白名单行展开后「查看修复」按钮出现；code-009 非白名单行无按钮，仅显示建议与片段。link-005、code-012 两条白名单行未逐一展开确认。
+    - [x] 4.2 非桌面降级：开发态 `POST /api/fixer/preview` 返回 404，弹窗显示 NOT_FOUND 降级提示与 request_id，符合非桌面关闭 fixer 接口的设计口径。
+    - [x] 4.3 关于/健康页：API 状态正常、引擎可用、缓存年龄 0 秒，来源模块-风险等级热力图数据齐全。
+    - [x] 4.4 历史记录案例表：累计巡查 10 次，趋势折线图与历史快照表 10 行正常；修复与回滚案例表空态挂载（本次运行未执行修复）。
+    - [x] 4.5 diff 弹窗勾选与键盘可达（打包态 `desktop_mode=1` 新 bundle 壳内实测 2026-11-19）：code-012 行展开后「查看修复」打开弹窗，标题「code-012 修复预览」、仓库标签 `demo-repo-2b0bb12d`、勾选框默认勾选、旧行 `if value == None:` → 新行 `if value is None:`、diff 删除/新增块在位、右上关闭、底部「选择备份目录」「确认写入」在位；Tab 顺序为 关闭→勾选框→选择备份目录→确认写入，键盘可遍历；未选备份目录时「确认写入」保持禁用。
+    - [x] 4.6 目录选择取消 → 停留不调 apply（打包态壳内实测）：点「选择备份目录」弹出原生目录框；取消（Esc 等价取消）返回 null，备份目录留空，「确认写入」保持禁用，`confirmApply` 因 `!backupDir` 直接 return，未发 apply；复核工程 demo-repo 与包内 `resources/demo-repo` 的 `none_compare.py:6` 仍为 `== None`，无副作用。
+    - [x] 4.7 备份目录选仓库内 → 403 拒绝（打包态后端 `127.0.0.1:8000` 接口直连）：`backup_dir=<repo>/backup-verify` 返回 403 `FIXER_BACKUP_DIR_FORBIDDEN`，提示「备份目录必须位于被巡检仓库之外」，目标文件未被修改，仓库内误建的空目录已清理。
+    - [x] 4.8 apply 写入成功后复扫刷新（打包态壳内手动端到端 + 后端接口直连 + 前端接线核对）：壳内手动选桌面仓库外备份目录完成一次 apply，applied=1、skipped=[]、backups=1，包内 `none_compare.py:6` 改为 `is None`；前端弹窗关闭后强制复扫实时刷新，code-012 筛选总数归 0、列表 total 32→31，旧缓存未残留。前端接线：`FixPreviewDialog` `emit('applied')` → `IssuesView.onApplied()` 调 `ctx.requestRefresh()`（refreshTick++ 且路由 query 带 `refresh=1` 强制复扫），无 ctx 时兜底 `load()`；新 bundle 已含该修复，接线在 `IssuesView.vue:288`、`AppShell.vue:52`、`FixPreviewDialog.vue:99/124` 核对在位。回滚后 restored=1 还原 `== None`，复扫恢复 code-012（total 32），哈希与原始留底 MATCH，临时备份目录已清理。
+    - [x] 4.9 rollback 成功 + 手工修改后冲突提示（打包态后端接口直连）：rollback 返回 restored=1、failed=[]，line6 还原 `== None:`；手工追加注释制造 sha 不匹配后，strict=false → restored=[]、failed=[{reason:"文件已被手工修改"}]；strict=true → 409 `FIXER_ROLLBACK_CONFLICT`，提示「文件已被手工修改，拒绝覆盖」。
 - **验收标准**：
   - [x] `pickDirectory` 暴露存在；`main.js`/`preload.js`/`desktop/package.json`/lock 零改动。
   - [x] 无新增 IPC；无 Electron 依赖版本变化。
-  - [ ] **SKIP** 手工验收 7 项逐条记录结果；无法执行的项标 `SKIP`，不计入通过。
-- **SKIP 说明（B 口径）**：桌面 GUI 手工验收无自动化覆盖；沙箱内 Electron 初始化崩溃（0xC0000005），需提权真实窗口，本轮不起壳。7 项挂起至交付前重打便携包时端到端复验。其中“按钮出现”一项受 fixer 入口未渲染问题（登记项）阻塞，复验前需先定位修复。
+  - [x] 手工验收 7 项逐条记录结果：4.1–4.4 开发态壳内通过，4.5–4.9 打包态通过；4.5/4.6/4.8 为壳内 GUI 实测（4.8 含选目录→写入→实时刷新→回滚还原），4.7/4.9 为打包态后端接口直连 + 前端事件接线核对。
+- **复验说明（B 口径）**：桌面 GUI 手工验收无自动化覆盖。2026-11-19 先在开发态真实 Electron 壳内复验：按钮渲染、非桌面降级、关于/健康页、历史案例表四项通过；#59「修复入口按钮未渲染」根因已定位——Electron userData 缓存了旧主 bundle，新 build 后旧哈希懒加载 chunk 被清导致 404、IssuesView 未挂载，清理缓存目录重启后视图与按钮正常，代码侧无阻断 bug。随后重打便携包（`desktop_mode=1`）完成打包态复验：4.5 弹窗勾选/键盘可达、4.6 目录取消不调 apply、4.8 选目录→写入→列表实时刷新→回滚还原为壳内 GUI 实测（4.8 原生目录弹窗由人工手动选择仓库外目录）；4.7 仓库内目录 403、4.9 rollback 成功与手工修改冲突提示为后端 `127.0.0.1:8000` 接口直连实测，4.8 前端 apply 后强制复扫的事件接线已核对在位。复验后包内样例文件已回滚还原、哈希与原始留底 MATCH，临时备份目录已清理。
 - **并行**：与 T20 可并行；**下一任务**：T20
 
 ## T20 编写 `docs/fixer_usage.md`

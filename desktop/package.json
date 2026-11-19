@@ -23,7 +23,7 @@
       { "from": "../frontend/dist", "to": "web" },
       { "from": "../backend/dist", "to": "backend" },
       { "from": "../demo-repo", "to": "demo-repo" },
-      { "from": "../data", "to": "data" }
+      { "from": "../data", "to": "data", "filter": ["**/*", "!**/*.db"] }
     ],
     "win": {
       "target": "dir"

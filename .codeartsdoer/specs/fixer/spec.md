@@ -78,14 +78,14 @@
 ## 3 输入与路径校验
 
 ### 3.1 输入
-- 仓库定位：`repo`。**桌面模式下 `repo` 必须为仓库绝对路径**（仅请求内部使用，不入响应）；响应统一返回 `repo_label`，不回传绝对路径。非桌面模式 fixer 不可用，不存在标识/相对名解析。
+- 仓库定位：`repo`。桌面模式下 `repo` 可为仓库绝对路径，或仓库标识（白名单根目录目录名 / 默认仓库名，与看板仓库标识同口径）；后端先把标识映射到对应白名单根目录，未命中再按绝对路径校验。解析结果仅请求内部使用，不入响应；响应统一返回 `repo_label`，不回传绝对路径。非桌面模式 fixer 不可用，不存在标识/相对名解析。
 - 问题条目：`file_path`、`line_no`、`rule_id`、`excerpt`（仅作展示/提示，不作为定位依据）。
 - 备份目录绝对路径：`backup_dir`（apply / rollback 请求内部使用，不回传响应）。
 - 本次勾选的补丁定位：`selections`，每项必须带完整定位。
 - 回滚清单：`backup_id` + `backups[]`（凭本次 apply 响应，前端内存暂存）。
 
 ### 3.2 路径规范化与归属
-1. `repo` 必须经既有 `resolve_repo_root()` / 桌面模式等价校验；桌面模式下按绝对路径解析，解析结果仅内部使用；失败返回既有仓库错误码。
+1. `repo` 先按标识在 `allowed_repo_roots` / `default_repo` 中映射根目录；未命中再经既有 `resolve_repo_root()` / 桌面模式等价校验（绝对路径、敏感目录、存在性、归属），解析结果仅内部使用；失败返回既有仓库错误码。
 2. 所有 `file_path` 必须是仓库内相对路径；规范化后必须位于仓库根内。绝对路径、盘符、UNC、设备路径、`..` 段一律拒绝。
 3. `backup_dir` 规范化后必须位于仓库根之外；位于仓库内、系统敏感目录、不存在或不可写一律拒绝。
 4. `backup_path` 必须是相对路径，规范化后必须位于本次 `backup_dir/backup_id` 之内；绝对路径、`..`、符号链接逃逸一律拒绝。
@@ -369,7 +369,7 @@
 - 备份目录使用仓库外临时目录；测试结束清理。
 - 符号链接用例使用 `unittest.mock.patch` 模拟 `lstat`/解析结果，**不依赖真实创建符号链接**，避免增加 skip。
 
-### 9.2 新增 14 条用例
+### 9.2 新增 16 条用例
 1. `test_preview_link005_inline_image_definition`：三类链接均生成 `%20`，old/new/diff 正确，definition title 不变。
 2. `test_preview_angle_wrapped_and_missing_target_not_fixable`：尖括号包裹、定位不到、行号越界 → `fixable=false`。
 3. `test_preview_non_whitelisted_rule_not_fixable`：非 link-005 一律 `fixable=false`。
@@ -384,6 +384,8 @@
 12. `test_rollback_backup_path_escape_rejected`：`backup_path` 越界/绝对路径 → 403。
 13. `test_rollback_detects_manual_modification`：apply 后手工修改 → 默认拒绝覆盖并记 failed。
 14. `test_apply_undecodable_and_unwritable_skipped`：GBK/二进制/只读文件 → skipped，不中断其他文件。
+15. `test_preview_accepts_repo_identity_name`：传仓库标识（目录名）可解析到白名单根目录，preview 返回 200 且补丁可修复。
+16. `test_preview_rejects_unknown_repo_identity`：未知标识既非白名单目录名也非默认仓库，仍按原口径拒绝（400 `INVALID_REPO_PATH`）。
 
 其中至少 6 条（1、3、4、6、8、11）通过 ASGI 调用三个 POST 端点，覆盖请求/响应契约与错误码。
 

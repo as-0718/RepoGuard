@@ -664,3 +664,21 @@ Entry --> User : 结构化问题列表 + 中文摘要 + 退出状态
 2. **验收条件（EARS）**：When `backend/requirements.txt` is parsed, the 规则引擎 shall 只列出可直接安装的依赖项且不含注释以外的多余说明。
 3. **验收条件（EARS）**：When `sample_changes.txt` is fed to the 汇总入口, the 规则引擎 shall 正常完成解析并覆盖全部四个检查模块的问题输出。
 4. **验收条件（EARS）**：When the sample manifest is executed twice, the 规则引擎 shall 输出完全一致的问题集合与统计数值（不含时间戳差异）。
+
+## **附录 A：评审迭代记录 — 高风险建议分步化**
+
+> 来源：赛后评审意见「检测建议偏笼统，缺少面向新手的操作步骤」。本附录为阶段 5 交付后的迭代补充，不改变第 5 章规则判定、问题级别、正则特征与替代方向。
+
+### A.1 本轮范围
+- 仅将安全类「必须修改」规则的 `suggestion` 由单句改为 ①②③ 分步表述：
+  - 敏感信息：`sens-002`（超大文件）、`sens-003`（PEM 私钥）、`sens-004`（令牌/API 密钥）、`sens-005`（明文口令/连接串）；
+  - 代码高危写法：`code-004`（C 危险函数）、`code-005`（eval/exec）、`code-006`（命令注入）。
+- 链接格式、命名/目录、注释规范类建议，以及建议级规则（`sens-006`、`code-007` 等）本轮保持原文案。
+
+### A.2 落点与基线
+- 文案落点：`backend/app/core/rules/sensitive.py` 聚合层建议；`backend/app/core/rules/common/config.py` 中对应 `PatternSpec.suggestion`。
+- 上述两文件属冻结清单；改动后按 T21 流程重算 `.codeartsdoer/evidence/stage5/hashes.txt` 中对应两项 SHA-256，其余 13 项冻结哈希不变。
+- 分步文案为内联编号纯文本，前端按既有纯文本方式展示，不依赖换行渲染；单条建议 ≤ 300 字符（实测最长 83 字符）。
+
+### A.3 验收
+- 后端全量 `unittest discover`：469 条 OK（skipped=4，0 失败）；冻结哈希 15/15；`app.py` 相对 stage6 基线 +2/-0。

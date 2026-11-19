@@ -37,6 +37,23 @@ CREATE TABLE IF NOT EXISTS issues (
 
 CREATE INDEX IF NOT EXISTS idx_issues_snapshot ON issues(snapshot_id);
 CREATE INDEX IF NOT EXISTS idx_snapshots_repo_time ON snapshots(repo_key, scanned_at);
+
+CREATE TABLE IF NOT EXISTS fix_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    repo_label TEXT NOT NULL DEFAULT '',
+    action TEXT NOT NULL DEFAULT '',
+    result TEXT NOT NULL DEFAULT '',
+    applied_count INTEGER NOT NULL DEFAULT 0,
+    skipped_count INTEGER NOT NULL DEFAULT 0,
+    restored_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+    files TEXT NOT NULL DEFAULT '[]',
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    request_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_fix_events_repo_time ON fix_events(repo_label, created_at);
 """
 
 

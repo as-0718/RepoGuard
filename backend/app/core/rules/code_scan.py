@@ -139,6 +139,120 @@ def _has_comment_above(source_lines: list[str], line_no: int) -> bool:
     return stripped.startswith("//") or stripped.startswith("*") or stripped.endswith("*/") or stripped.startswith("/*")
 
 
+_COMMENT_MARKER_RE = re.compile(r"\b(TODO|FIXME|HACK|XXX)\b")
+
+
+def _scan_comment_markers(text: str, file_path: str, language: str) -> list:
+    """扫描注释中遗留的 TODO/FIXME/HACK/XXX 标记（建议级）。"""
+    findings = []
+    for index, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if language == "python":
+            is_comment = stripped.startswith("#")
+        else:
+            is_comment = (
+                stripped.startswith("//")
+                or stripped.startswith("/*")
+                or stripped.endswith("*/")
+                or stripped.startswith("*")
+            )
+        if not is_comment:
+            continue
+        match = _COMMENT_MARKER_RE.search(stripped)
+        if not match:
+            continue
+        findings.append(
+            make_finding(
+                level=IssueLevel.SUGGESTION,
+                file_path=file_path,
+                message=f"注释中留有 {match.group(1)} 遗留标记，需确认是否已处理",
+                suggestion="提交前确认该事项已完成；已完成则删除标记，未完成请补充处理计划或工单",
+                rule_id="code-009",
+                line_no=index,
+                excerpt=stripped[:60] or None,
+            )
+        )
+    return findings
+
+
+_MUTABLE_LITERAL_NODES = (ast.List, ast.Dict, ast.Set)
+
+
+def _scan_python_bug_patterns(tree: ast.AST, file_path: str) -> list:
+    """扫描可由 AST 静态判定的常见 bug 写法（建议级）。"""
+    findings: list = []
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        defaults = list(node.args.defaults)
+        defaults.extend(d for d in node.args.kw_defaults if d is not None)
+        mutable_defaults = [d for d in defaults if isinstance(d, _MUTABLE_LITERAL_NODES)]
+        if mutable_defaults:
+            findings.append(
+                make_finding(
+                    level=IssueLevel.SUGGESTION,
+                    file_path=file_path,
+                    message=f"函数 {node.name} 用可变对象作默认参数，多次调用会共享同一对象",
+                    suggestion="① 默认值改为 None；② 函数体首行用 if arg is None: arg = [] 按需初始化",
+                    rule_id="code-011",
+                    line_no=node.lineno,
+                )
+            )
+
+        body = list(node.body)
+        if (
+            body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            body = body[1:]
+        real_body = [
+            stmt
+            for stmt in body
+            if not (
+                isinstance(stmt, ast.Pass)
+                or (
+                    isinstance(stmt, ast.Expr)
+                    and isinstance(stmt.value, ast.Constant)
+                    and stmt.value.value is Ellipsis
+                )
+            )
+        ]
+        if body and not real_body:
+            findings.append(
+                make_finding(
+                    level=IssueLevel.SUGGESTION,
+                    file_path=file_path,
+                    message=f"函数 {node.name} 函数体为空（仅 pass 或 ...），缺少实际实现",
+                    suggestion="① 补全函数实现；② 未完成时抛出 NotImplementedError 并注释原因，避免被误调用",
+                    rule_id="code-013",
+                    line_no=node.lineno,
+                )
+            )
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Compare):
+            continue
+        has_eq_op = any(isinstance(op, (ast.Eq, ast.NotEq)) for op in node.ops)
+        has_none = any(isinstance(c, ast.Constant) and c.value is None for c in node.comparators)
+        if has_eq_op and has_none:
+            findings.append(
+                make_finding(
+                    level=IssueLevel.SUGGESTION,
+                    file_path=file_path,
+                    message="用 == None 或 != None 比较身份，应改用 is / is not",
+                    suggestion="将 == None 改为 is None，!= None 改为 is not None，身份比较更稳妥",
+                    rule_id="code-012",
+                    line_no=node.lineno,
+                )
+            )
+
+    return findings
+
+
 def _apply_patterns(
     code_view: str,
     source_text: str,
@@ -257,7 +371,9 @@ def scan_python_source(
                         line_no=line_no,
                     )
                 )
+        findings.extend(_scan_python_bug_patterns(tree, file_path))
 
+    findings.extend(_scan_comment_markers(text, file_path, "python"))
     code_view = build_code_view(text, "python")
     findings.extend(_apply_patterns(code_view, text, "python", config, file_path))
 
@@ -393,6 +509,7 @@ def scan_c_source(
             )
         index = end_index + 1
 
+    findings.extend(_scan_comment_markers(text, file_path, "c"))
     code_view = build_code_view(text, "c")
     findings.extend(_apply_patterns(code_view, text, "c", config, file_path))
 

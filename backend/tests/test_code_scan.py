@@ -191,6 +191,37 @@ class CodeScanTest(unittest.TestCase):
         self.assertEqual(result.findings, ())
         self.assertIsNotNone(result.skip_reason)
 
+    def test_comment_marker(self):
+        python_text = '"""说明。"""\n# TODO 补充边界单测\ndef foo():\n    return 1\n'
+        c_text = "/* 文件说明 */\n// FIXME 处理空指针\nint main(void) { return 0; }\n"
+        python_findings = code_scan.scan_python_source(python_text, "a.py", DEFAULT_CONFIG)
+        c_findings = code_scan.scan_c_source(c_text, "a.c", DEFAULT_CONFIG)
+        self.assertIn("code-009", {item.rule_id for item in python_findings})
+        self.assertIn("code-009", {item.rule_id for item in c_findings})
+        clean_python = '"""说明。"""\ndef foo():\n    return 1\n'
+        self.assertNotIn("code-009", {item.rule_id for item in code_scan.scan_python_source(clean_python, "a.py", DEFAULT_CONFIG)})
+
+    def test_debug_trace(self):
+        bp_text = '"""说明。"""\ndef foo():\n    breakpoint()\n    return 1\n'
+        pdb_text = '"""说明。"""\nimport pdb\ndef foo():\n    pdb.set_trace()\n    return 1\n'
+        self.assertIn("code-010", {item.rule_id for item in code_scan.scan_python_source(bp_text, "a.py", DEFAULT_CONFIG)})
+        self.assertIn("code-010", {item.rule_id for item in code_scan.scan_python_source(pdb_text, "a.py", DEFAULT_CONFIG)})
+        clean = '"""说明。"""\ndef foo():\n    return 1\n'
+        self.assertNotIn("code-010", {item.rule_id for item in code_scan.scan_python_source(clean, "a.py", DEFAULT_CONFIG)})
+
+    def test_bug_patterns(self):
+        mutable = '"""说明。"""\ndef append(item, bucket=[]):\n    """追加到列表。"""\n    bucket.append(item)\n    return bucket\n'
+        none_cmp = '"""说明。"""\ndef normalize(value):\n    """归一化。"""\n    if value == None:\n        return ""\n    return str(value)\n'
+        empty = '"""说明。"""\ndef stub():\n    """预留接口。"""\n    pass\n'
+        self.assertIn("code-011", {item.rule_id for item in code_scan.scan_python_source(mutable, "a.py", DEFAULT_CONFIG)})
+        self.assertIn("code-012", {item.rule_id for item in code_scan.scan_python_source(none_cmp, "a.py", DEFAULT_CONFIG)})
+        self.assertIn("code-013", {item.rule_id for item in code_scan.scan_python_source(empty, "a.py", DEFAULT_CONFIG)})
+        clean = '"""说明。"""\ndef normalize(value):\n    """归一化。"""\n    if value is None:\n        return ""\n    return str(value)\n'
+        clean_ids = {item.rule_id for item in code_scan.scan_python_source(clean, "a.py", DEFAULT_CONFIG)}
+        self.assertNotIn("code-011", clean_ids)
+        self.assertNotIn("code-012", clean_ids)
+        self.assertNotIn("code-013", clean_ids)
+
     def test_no_execution(self):
         text = '"""说明。"""\nraise RuntimeError("不应被执行")\nopen("side_effect.txt", "w")\n'
         with tempfile.TemporaryDirectory() as temp:

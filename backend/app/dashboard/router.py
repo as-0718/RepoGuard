@@ -401,17 +401,19 @@ def history(
     web_settings: object = fastapi.Depends(get_web_settings),
 ) -> starlette.responses.JSONResponse:
     from .service import resolve_dashboard_repo, snapshot_key
-    from ..storage import list_snapshots
+    from ..storage import count_snapshots, list_snapshots
 
     repo_key = None
     if repo and repo.strip():
         root = resolve_dashboard_repo(repo, web_settings)
         repo_key = snapshot_key(root)
     records = list_snapshots(web_settings.db_path, repo_key=repo_key, limit=limit)
+    total_count = count_snapshots(web_settings.db_path, repo_key=repo_key)
     return _json_response(
         request,
         {
             "history": records,
+            "total_count": total_count,
             "generated_at": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),
         },
     )
@@ -429,3 +431,23 @@ def history_detail(
     if record is None:
         _raise_api("HISTORY_NOT_FOUND", 404, "历史记录不存在或已被清理")
     return _json_response(request, {"snapshot": record})
+
+
+@router.get("/fix-events")
+def fix_events(
+    request: fastapi.Request,
+    repo: str | None = fastapi.Query(default=None, max_length=512),
+    limit: int = fastapi.Query(default=20, ge=1, le=200),
+    web_settings: object = fastapi.Depends(get_web_settings),
+) -> starlette.responses.JSONResponse:
+    from ..storage import list_fix_events
+
+    label = repo.strip() if repo and repo.strip() else None
+    events = list_fix_events(web_settings.db_path, repo_label=label, limit=limit)
+    return _json_response(
+        request,
+        {
+            "events": events,
+            "generated_at": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),
+        },
+    )

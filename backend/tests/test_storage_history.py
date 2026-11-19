@@ -7,10 +7,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from app.storage import (
+    count_snapshots,
     db_available,
     get_snapshot_with_issues,
     init_db,
+    list_fix_events,
     list_snapshots,
+    record_fix_event,
     record_snapshot,
 )
 
@@ -103,11 +106,104 @@ class StorageHistoryTests(unittest.TestCase):
         self.assertEqual(len(limited), 1)
         self.assertEqual(limited[0]["id"], third)
 
+    def test_count_snapshots_total_and_filtered(self) -> None:
+        self._record("repo-a", "key-a", "2026-01-01T00:00:00+00:00", ())
+        self._record("repo-a", "key-a", "2026-01-02T00:00:00+00:00", ())
+        self._record("repo-b", "key-b", "2026-01-03T00:00:00+00:00", ())
+
+        self.assertEqual(count_snapshots(self.db_path), 3)
+        self.assertEqual(count_snapshots(self.db_path, repo_key="key-a"), 2)
+        self.assertEqual(count_snapshots(self.db_path, repo_key="key-b"), 1)
+        self.assertEqual(count_snapshots(self.db_path, repo_key="no-such-key"), 0)
+
     def test_detail_missing_returns_none(self) -> None:
         self.assertIsNone(get_snapshot_with_issues(self.db_path, 99999))
 
     def test_db_available(self) -> None:
         self.assertTrue(db_available(self.db_path))
+
+    def test_fix_event_roundtrip_and_filter(self) -> None:
+        first = record_fix_event(
+            self.db_path,
+            repo_label="repo-a",
+            action="apply",
+            result="success",
+            applied_count=2,
+            skipped_count=0,
+            files=["docs/a.md", "docs/b.md"],
+            duration_ms=31,
+            request_id="req-1",
+        )
+        second = record_fix_event(
+            self.db_path,
+            repo_label="repo-a",
+            action="rollback",
+            result="partial",
+            restored_count=1,
+            failed_count=1,
+            files=["docs/a.md"],
+            duration_ms=12,
+            request_id="req-2",
+        )
+        third = record_fix_event(
+            self.db_path,
+            repo_label="repo-b",
+            action="apply",
+            result="failed",
+            skipped_count=1,
+            files=[],
+            duration_ms=5,
+        )
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        self.assertIsNotNone(third)
+
+        all_events = list_fix_events(self.db_path)
+        self.assertEqual([item["id"] for item in all_events], [third, second, first])
+        self.assertEqual(all_events[0]["action"], "apply")
+        self.assertEqual(all_events[0]["result"], "failed")
+
+        filtered = list_fix_events(self.db_path, repo_label="repo-a")
+        self.assertEqual([item["id"] for item in filtered], [second, first])
+        self.assertEqual(filtered[0]["files"], ["docs/a.md"])
+        self.assertEqual(filtered[1]["files"], ["docs/a.md", "docs/b.md"])
+
+        limited = list_fix_events(self.db_path, limit=1)
+        self.assertEqual(len(limited), 1)
+        self.assertEqual(limited[0]["id"], third)
+
+    def test_fix_event_file_entries_with_mtime(self) -> None:
+        record_fix_event(
+            self.db_path,
+            repo_label="repo-a",
+            action="apply",
+            result="success",
+            applied_count=1,
+            files=[{"path": "docs/a.md", "mtime": "2026-01-01T10:00:00+00:00"}],
+            duration_ms=9,
+            request_id="req-m",
+        )
+        events = list_fix_events(self.db_path, repo_label="repo-a")
+        self.assertEqual(len(events), 1)
+        entry = events[0]["files"][0]
+        self.assertEqual(entry["path"], "docs/a.md")
+        self.assertEqual(entry["mtime"], "2026-01-01T10:00:00+00:00")
+
+    def test_fix_event_degradation_on_unwritable_path(self) -> None:
+        blocker = Path(self.temp_dir) / "blocker.txt"
+        blocker.write_text("x", encoding="utf-8")
+        bad_path = blocker / "nested" / "repoguard.db"
+
+        self.assertIsNone(
+            record_fix_event(
+                bad_path,
+                repo_label="x",
+                action="apply",
+                result="failed",
+                files=[],
+            )
+        )
+        self.assertEqual(list_fix_events(bad_path), [])
 
     def test_degradation_on_unwritable_path(self) -> None:
         blocker = Path(self.temp_dir) / "blocker.txt"

@@ -46,7 +46,7 @@ def check_file_size(
                 level=IssueLevel.MUST_FIX,
                 file_path=file_path,
                 message=f"文件体积为 {size_mb:.1f} MB，超过仓库允许的 5 MB 上限",
-                suggestion="把文件移出仓库改用外部存储链接，或使用 Git LFS 管理大文件",
+                suggestion="① 将该大文件移出 Git 仓库；② 改用外部存储链接或 Git LFS 跟踪；③ 从历史提交中清理该文件后再推送",
                 rule_id="sens-002",
             ),
         )
@@ -197,17 +197,17 @@ def scan_secrets(
         _aggregate(
             "sens-003", records["sens-003"], file_path,
             "检测到 PEM 私钥内容，属于高危敏感信息",
-            "立即移除私钥并轮换凭据，改用环境变量或密钥管理服务",
+            "① 删除代码中的这段私钥内容；② 到对应平台吊销该密钥并重新生成；③ 新密钥改用环境变量或密钥管理服务读取，不要写进仓库",
         ),
         _aggregate(
             "sens-004", records["sens-004"], file_path,
             "检测到疑似访问令牌或 API 密钥，属于高危敏感信息",
-            "立即移除并轮换令牌，改用环境变量或配置模板占位",
+            "① 删除代码里的这串令牌；② 到对应平台吊销旧令牌并申请新令牌；③ 新令牌改用环境变量读取，或在配置模板中用占位符代替",
         ),
         _aggregate(
             "sens-005", records["sens-005"], file_path,
             "检测到疑似明文口令或连接串，属于敏感信息",
-            "改用环境变量读取或配置模板占位，不要提交真实口令",
+            "① 删除这段真实口令或连接串；② 账号口令改放到环境变量或配置模板占位符；③ 重新提交前确认仓库里不再出现明文口令",
         ),
         _aggregate(
             "sens-006", records["sens-006"], file_path,

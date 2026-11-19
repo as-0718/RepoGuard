@@ -22,7 +22,9 @@
   --color-error-code-bg: rgba(138, 36, 28, 0.1);
   --radius: 10px;
   --shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+  --shadow-hover: 0 6px 18px rgba(16, 24, 40, 0.12);
   --space: 16px;
+  --bg-grad: linear-gradient(180deg, #eaf1fb 0%, var(--color-bg) 240px);
 }
 
 [data-theme='dark'] {
@@ -48,13 +50,16 @@
   --color-error-text: #fca5a5;
   --color-error-code-bg: rgba(240, 101, 90, 0.18);
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-hover: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --bg-grad: linear-gradient(180deg, #101d30 0%, var(--color-bg) 240px);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 
 body {
-  background: var(--color-bg);
+  background: var(--bg-grad);
+  background-attachment: fixed;
   color: var(--color-text);
   font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
   font-size: 14px;
@@ -83,7 +88,11 @@ a { color: var(--color-accent); }
   color: var(--color-text); text-decoration: none; white-space: nowrap;
 }
 
-.brand-mark { width: 22px; height: 22px; border-radius: 6px; background: var(--color-accent); display: inline-block; }
+.brand-mark {
+  width: 22px; height: 22px; border-radius: 6px; display: inline-block;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-2));
+  box-shadow: 0 1px 4px rgba(31, 111, 235, 0.35);
+}
 .app-nav { display: flex; gap: 4px; overflow-x: auto; }
 
 .app-nav a {
@@ -145,7 +154,10 @@ a { color: var(--color-accent); }
 .card {
   background: var(--color-surface); border: 1px solid var(--color-border);
   border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
 }
+
+.card:hover { box-shadow: var(--shadow-hover); border-color: var(--color-accent); }
 
 .kpi-card { margin: 0; display: block; }
 .kpi-card dt { font-size: 12px; color: var(--color-muted); margin-bottom: 6px; }
@@ -230,7 +242,10 @@ a { color: var(--color-accent); }
 .chart-panel {
   margin: 0; background: var(--color-surface); border: 1px solid var(--color-border);
   border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px 14px; min-width: 0;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
 }
+
+.chart-panel:hover { box-shadow: var(--shadow-hover); }
 
 .chart-panel figcaption { font-weight: 600; margin-bottom: 8px; }
 .chart-canvas { width: 100%; min-height: 120px; }

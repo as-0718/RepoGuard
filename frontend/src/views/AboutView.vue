@@ -44,6 +44,11 @@ const engineStatus = computed(() => {
   if (!health.value) return '—'
   return health.value.engine === 'available' ? '可用' : '不可用'
 })
+const dbStatus = computed(() => {
+  if (healthError.value) return '不可用'
+  if (!health.value) return '—'
+  return health.value.database === 'available' ? '已连接' : '未连接'
+})
 const cacheAge = computed(() =>
   typeof snapshotMeta.value?.cache_age_seconds === 'number'
     ? `${snapshotMeta.value.cache_age_seconds} 秒`
@@ -66,6 +71,8 @@ const configRows = computed(() => [
   { name: '服务', value: health.value?.service || '—' },
   { name: '版本', value: health.value?.version || '—' },
   { name: '引擎', value: engineStatus.value },
+  { name: '数据库', value: dbStatus.value },
+  { name: '本地库文件', value: 'data/repoguard.db' },
   { name: '默认仓库', value: health.value?.default_repo || '—' },
   { name: '允许仓库根数', value: health.value?.allowed_repo_root_count ?? '—' },
   { name: '快照 TTL（秒）', value: snapshotMeta.value?.ttl_seconds ?? '—' },
@@ -176,8 +183,8 @@ onBeforeUnmount(() => {
 <template>
   <section>
     <h1 class="page-title">关于 / 健康</h1>
-    <p class="page-subtitle">服务健康、缓存年龄、来源模块状态与错误码说明。</p>
-    <p class="page-subtitle">健康检查接口：/api/health（只读）。</p>
+    <p class="page-subtitle">服务健康、数据库连接、缓存年龄、来源模块状态与错误码说明。</p>
+    <p class="page-subtitle">健康检查接口：/api/health（只读）；巡检快照与修复记录保存在本地 SQLite，可在历史记录页追溯。</p>
 
     <LoadingSkeleton v-if="loading && !health" variant="kpi" :count="3" />
 
@@ -236,9 +243,9 @@ onBeforeUnmount(() => {
       <section class="section card">
         <h2 class="section-heading">只读说明</h2>
         <ul>
-          <li>本看板仅执行读取操作，不提供任何写接口、删除或修改能力。</li>
-          <li>不保存历史趋势，仅展示最近一次巡检快照；缓存过期后重新扫描。</li>
-          <li>数据来源：本地巡检引擎、README 扫描器与看板快照缓存。</li>
+          <li>看板浏览与查询均为只读；文件修复需先预览补丁、自动备份，再由用户确认后写入。</li>
+          <li>历次巡检快照、问题明细与修复/回滚记录保存在本地 SQLite，历史记录页可查看趋势与修复案例；缓存过期后重新扫描。</li>
+          <li>数据来源：本地巡检引擎、README 扫描器、看板快照缓存与本地 SQLite 记录库。</li>
           <li>刷新受服务端节流限制，频繁刷新会返回最近一次快照。</li>
         </ul>
       </section>

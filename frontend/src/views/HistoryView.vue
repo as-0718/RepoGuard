@@ -1,8 +1,9 @@
 <script setup>
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue'
-import { getHistory, getHistoryDetail } from '@api/dashboard.js'
+import { getFixEvents, getHistory, getHistoryDetail } from '@api/dashboard.js'
 import ChartPanel from '../components/ChartPanel.vue'
 import DataTable from '../components/DataTable.vue'
+import KpiCard from '../components/KpiCard.vue'
 import EmptyState from '../components/EmptyState.vue'
 import ErrorBanner from '../components/ErrorBanner.vue'
 import LoadingSkeleton from '../components/LoadingSkeleton.vue'
@@ -10,9 +11,44 @@ import LoadingSkeleton from '../components/LoadingSkeleton.vue'
 const ctx = inject('dashboardContext')
 
 const history = ref([])
+const totalCount = ref(0)
 const loading = ref(false)
 const error = ref(null)
 const details = ref({})
+const fixEvents = ref([])
+const fixError = ref(null)
+
+const ACTION_LABEL = { apply: '应用修复', rollback: '回滚恢复' }
+const RESULT_LABEL = { success: '成功', partial: '部分成功', failed: '失败' }
+const RESULT_CLASS = {
+  success: 'fix-badge--success',
+  partial: 'badge--suggestion',
+  failed: 'badge--high',
+}
+
+function actionLabel(row) {
+  return ACTION_LABEL[row?.action] || row?.action || '—'
+}
+
+function resultLabel(row) {
+  return RESULT_LABEL[row?.result] || row?.result || '—'
+}
+
+function resultClass(row) {
+  return RESULT_CLASS[row?.result] || 'badge--neutral'
+}
+
+function fileLabel(file) {
+  if (typeof file === 'string') return file
+  const path = file?.path || '—'
+  const mtime = shortTime(file?.mtime)
+  return mtime && mtime !== '—' ? `${path}（${mtime}）` : path
+}
+
+function filesText(row) {
+  const files = Array.isArray(row?.files) ? row.files : []
+  return files.length ? files.map(fileLabel).join('、') : '—'
+}
 
 let controller = null
 let requestSeq = 0
@@ -101,6 +137,7 @@ async function load() {
     const payload = await getHistory({ repo, limit: 20, signal: controller.signal })
     if (seq !== requestSeq) return
     history.value = Array.isArray(payload?.history) ? payload.history : []
+    totalCount.value = Number(payload?.total_count ?? history.value.length) || 0
   } catch (err) {
     if (err?.name === 'AbortError' || seq !== requestSeq) return
     error.value = {
@@ -136,10 +173,28 @@ function onRowToggle(row) {
   ensureDetail(row)
 }
 
+async function loadFixEvents() {
+  try {
+    const payload = await getFixEvents({ limit: 20, signal: controller?.signal })
+    fixEvents.value = Array.isArray(payload?.events) ? payload.events : []
+    fixError.value = null
+  } catch (err) {
+    if (err?.name === 'AbortError') return
+    fixError.value = {
+      code: err?.code || 'NETWORK_ERROR',
+      message: err?.message || '修复案例加载失败',
+      detail: err?.detail || '',
+    }
+  }
+}
+
 watch(
   repoId,
   (repo) => {
-    if (repo) load(false)
+    if (repo) {
+      load(false)
+      loadFixEvents()
+    }
   },
   { immediate: true },
 )
@@ -149,7 +204,10 @@ watch(
   (tick) => {
     if (tick === lastTick) return
     lastTick = tick
-    if (repoId.value) load(true)
+    if (repoId.value) {
+      load(true)
+      loadFixEvents()
+    }
   },
 )
 
@@ -179,6 +237,15 @@ onBeforeUnmount(() => {
     <template v-else>
       <div v-if="loading" class="progress-line" aria-hidden="true"></div>
       <ErrorBanner :error="error" :stale="true" @retry="load" />
+
+      <div class="history-stats">
+        <KpiCard
+          label="累计巡查"
+          :value="totalCount"
+          unit="次"
+          hint="当前仓库在本地 SQLite 库中保存的巡检快照总数，不受列表条数限制。"
+        />
+      </div>
 
       <ChartPanel
         chart-id="history-trend"
@@ -238,11 +305,57 @@ onBeforeUnmount(() => {
           </div>
         </template>
       </DataTable>
+
+      <section class="fix-events">
+        <h2 class="section-title">修复与回滚案例</h2>
+        <p class="section-subtitle">
+          本地 SQLite 留存历次自动修复与回滚结果，跨会话可查；空表表示本次运行后尚未执行过修复。
+        </p>
+        <ErrorBanner v-if="fixError" :error="fixError" :stale="true" />
+        <table class="data-table fix-events__table">
+          <thead>
+            <tr>
+              <th scope="col">时间</th>
+              <th scope="col">动作</th>
+              <th scope="col">结果</th>
+              <th scope="col" class="num">已修改</th>
+              <th scope="col" class="num">已回滚</th>
+              <th scope="col" class="num">跳过</th>
+              <th scope="col" class="num">失败</th>
+              <th scope="col">涉及文件</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="!fixEvents.length">
+              <td :colspan="8">暂无修复案例，执行一次链接修复后会自动记录。</td>
+            </tr>
+            <tr v-for="row in fixEvents" :key="row.id">
+              <td>{{ shortTime(row.created_at) }}</td>
+              <td>{{ actionLabel(row) }}</td>
+              <td>
+                <span class="badge" :class="resultClass(row)">{{ resultLabel(row) }}</span>
+              </td>
+              <td class="num">{{ row.applied_count ?? 0 }}</td>
+              <td class="num">{{ row.restored_count ?? 0 }}</td>
+              <td class="num">{{ row.skipped_count ?? 0 }}</td>
+              <td class="num">{{ row.failed_count ?? 0 }}</td>
+              <td class="fix-events__files">{{ filesText(row) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
     </template>
   </section>
 </template>
 
 <style scoped>
+.history-stats {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
 .history-detail {
   padding: 8px 0;
 }
@@ -260,5 +373,39 @@ onBeforeUnmount(() => {
 .history-detail__table {
   width: 100%;
   font-size: 13px;
+}
+
+.fix-events {
+  margin-top: 24px;
+}
+
+.section-title {
+  font-size: 16px;
+  margin: 0 0 4px;
+}
+
+.section-subtitle {
+  color: var(--color-muted);
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.fix-events__table {
+  width: 100%;
+  font-size: 13px;
+}
+
+.fix-events__table .num {
+  text-align: right;
+}
+
+.fix-events__files {
+  max-width: 280px;
+  word-break: break-all;
+}
+
+.fix-badge--success {
+  color: var(--color-accent-2);
+  background: var(--color-neutral-soft);
 }
 </style>

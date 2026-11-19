@@ -131,15 +131,63 @@ const topFilesTable = computed(() => ({
 }))
 
 const kpiItems = computed(() => [
-  { label: '文件数', value: data.value?.files_count, tone: 'neutral' },
-  { label: '问题总数', value: summary.value.issue_count, tone: 'neutral' },
-  { label: '高风险', value: summary.value.must_fix_count, tone: 'high', clickable: true },
-  { label: '建议', value: summary.value.suggestion_count, tone: 'suggestion', clickable: true },
-  { label: '僵尸候选', value: summary.value.zombie_candidate_count, tone: 'neutral' },
-  { label: '无法判定', value: summary.value.undetermined_count, tone: 'muted' },
-  { label: '降级项', value: summary.value.degraded_count, tone: 'muted' },
-  { label: '跳过文件', value: summary.value.skipped_file_count, tone: 'muted' },
-  { label: '扫描耗时', value: snapshot.value?.duration_ms, unit: 'ms', tone: 'neutral' },
+  {
+    label: '文件数',
+    value: data.value?.files_count,
+    tone: 'neutral',
+    hint: '本次纳入统计的文件数量，已跳过依赖、构建产物等目录。',
+  },
+  {
+    label: '问题总数',
+    value: summary.value.issue_count,
+    tone: 'neutral',
+    hint: '本次检出的全部问题条数，含高风险与建议两类。',
+  },
+  {
+    label: '高风险',
+    value: summary.value.must_fix_count,
+    tone: 'high',
+    clickable: true,
+    hint: '需优先处理的问题，如硬编码凭据、危险函数、失效链接等。',
+  },
+  {
+    label: '建议',
+    value: summary.value.suggestion_count,
+    tone: 'suggestion',
+    clickable: true,
+    hint: '可优化项，不影响基本运行，建议有空再调整。',
+  },
+  {
+    label: '僵尸候选',
+    value: summary.value.zombie_candidate_count,
+    tone: 'neutral',
+    hint: '疑似不再被引用的遗留文件或代码，可结合实际确认是否删除。',
+  },
+  {
+    label: '无法判定',
+    value: summary.value.undetermined_count,
+    tone: 'muted',
+    hint: '规则不足以确定结论，需要人工进一步核对。',
+  },
+  {
+    label: '降级项',
+    value: summary.value.degraded_count,
+    tone: 'muted',
+    hint: '本次巡检中未能完整检查、被跳过或部分受限的部分。',
+  },
+  {
+    label: '跳过文件',
+    value: summary.value.skipped_file_count,
+    tone: 'muted',
+    hint: '因体积过大、二进制或编码等原因，未做内容扫描的文件。',
+  },
+  {
+    label: '扫描耗时',
+    value: snapshot.value?.duration_ms,
+    unit: 'ms',
+    tone: 'neutral',
+    hint: '本次巡检从开始到结束的总耗时。',
+  },
 ])
 
 async function load(forceRefresh) {
@@ -272,6 +320,7 @@ onBeforeUnmount(() => {
           :unit="item.unit || ''"
           :tone="item.tone"
           :clickable="Boolean(item.clickable)"
+          :hint="item.hint || ''"
           @select="onKpiSelect(item)"
         />
       </div>

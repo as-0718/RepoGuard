@@ -57,6 +57,13 @@ export function getHistoryDetail({ id, signal } = {}) {
   return requestJson(`/api/dashboard/history/${id}`, { signal })
 }
 
+export function getFixEvents({ repo, limit = 20, signal } = {}) {
+  return requestJson('/api/dashboard/fix-events', {
+    params: { repo, limit },
+    signal,
+  })
+}
+
 export function checkRepo({ path, signal } = {}) {
   return requestJson('/api/dashboard/check-repo', { method: 'POST', body: { path }, signal })
 }

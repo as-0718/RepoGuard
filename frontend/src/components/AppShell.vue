@@ -21,13 +21,6 @@ const repoId = computed(() => {
   return fromQuery || getStoredRepo() || defaultRepo.value
 })
 
-const meta = computed(() => snapshotMeta.value || {})
-const hasMeta = computed(() => Boolean(snapshotMeta.value))
-const cachedText = computed(() => (meta.value.cached ? '是' : '否'))
-const cacheAgeText = computed(() =>
-  typeof meta.value.cache_age_seconds === 'number' ? `${meta.value.cache_age_seconds} 秒` : '—',
-)
-
 function setRequesting(value) {
   requesting.value = Boolean(value)
 }
@@ -129,15 +122,8 @@ onMounted(loadRepos)
         </div>
       </div>
 
-      <div class="shell-meta">
-        <template v-if="hasMeta">
-          <span>扫描时间 <strong>{{ meta.scanned_at || '—' }}</strong></span>
-          <span>缓存命中 <strong>{{ cachedText }}</strong></span>
-          <span>缓存年龄 <strong>{{ cacheAgeText }}</strong></span>
-          <span>刷新节流 <strong>{{ meta.refresh_throttled ? '是' : '否' }}</strong></span>
-        </template>
-        <span v-else>尚无快照信息</span>
-        <span v-if="reposError" class="tone-tag tone-tag--high">{{ reposError }}</span>
+      <div v-if="reposError" class="shell-error" role="alert">
+        <span class="tone-tag tone-tag--high">{{ reposError }}</span>
       </div>
     </header>
 

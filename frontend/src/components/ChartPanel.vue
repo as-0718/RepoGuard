@@ -9,6 +9,7 @@ import {
   TitleComponent,
   DatasetComponent,
   AriaComponent,
+  VisualMapComponent,
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { themeRef } from '../api/theme.js'
@@ -25,6 +26,7 @@ echarts.use([
   TitleComponent,
   DatasetComponent,
   AriaComponent,
+  VisualMapComponent,
   CanvasRenderer,
 ])
 
@@ -47,11 +49,14 @@ let observer = null
 let resizeTimer = null
 
 function withAria(option) {
-  return { ...option, aria: { enabled: true, decal: { show: true } } }
+  // 无障碍语义由外层 DOM 的 role="img" / aria-label 提供；
+  // 这里关闭 ECharts 自带 aria，避免其默认贴花（斜纹/圆点）盖在柱条上。
+  return { ...option, aria: { enabled: false, decal: { show: false } } }
 }
 
 function resolveOption() {
-  return withAria(themedOption(props.option))
+  // 关闭入场动画：静态呈现更稳，避免个别环境下动画帧未推进导致柱体/扇区不显示。
+  return { ...withAria(themedOption(props.option)), animation: false }
 }
 
 function handleClick(params) {
@@ -72,7 +77,8 @@ function ensureObserver() {
 function ensureInit() {
   if (chart || props.empty || !el.value) return
   chart = echarts.init(el.value, null, { renderer: 'canvas' })
-  if (props.option) chart.setOption(resolveOption(), { notMerge: true })
+  const opt = resolveOption()
+  if (props.option) chart.setOption(opt, { notMerge: true })
   chart.on('click', handleClick)
   ensureObserver()
 }

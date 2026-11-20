@@ -89,10 +89,10 @@ const matrixEmpty = computed(() =>
 )
 
 function heatColor(value) {
-  if (value <= 0) return '#eef1f6'
-  if (value < 3) return '#fbd38d'
-  if (value < 8) return '#f6ad55'
-  return '#c0392b'
+  if (value <= 0) return '#18263d'
+  if (value < 3) return '#d9b26a'
+  if (value < 8) return '#e3b045'
+  return '#e56159'
 }
 
 const matrixOption = computed(() => {
@@ -106,6 +106,7 @@ const matrixOption = computed(() => {
   return {
     tooltip: { position: 'top' },
     grid: { left: 8, right: 16, top: 12, bottom: 8, containLabel: true },
+    visualMap: { show: false, min: 0, max: 8, seriesIndex: 0 },
     xAxis: { type: 'category', data: ['高风险', '建议'] },
     yAxis: { type: 'category', data: matrixRows.value.map((row) => row.module) },
     series: [
@@ -114,7 +115,7 @@ const matrixOption = computed(() => {
         type: 'heatmap',
         data: cells,
         label: { show: true },
-        emphasis: { itemStyle: { borderColor: '#333', borderWidth: 1 } },
+        emphasis: { itemStyle: { borderColor: '#22314a', borderWidth: 1 } },
       },
     ],
   }

@@ -61,8 +61,8 @@ const sectionsOption = computed(() => ({
       radius: ['45%', '70%'],
       center: ['50%', '45%'],
       data: [
-        { name: '文档索引', value: docCount.value, itemStyle: { color: '#1f6feb' } },
-        { name: 'Demo 工程', value: demoCount.value, itemStyle: { color: '#2f855a' } },
+        { name: '文档索引', value: docCount.value, itemStyle: { color: '#1d70e3' } },
+        { name: 'Demo 工程', value: demoCount.value, itemStyle: { color: '#2cbe87' } },
       ],
       label: { formatter: '{b}：{c}' },
     },
@@ -78,11 +78,19 @@ const demoOption = computed(() => ({
     {
       name: '数量',
       type: 'bar',
+      barWidth: 32,
+      barMaxWidth: 40,
       data: [
         Number(readme.value.demo_project_count || 0),
         suspectedCount.value,
       ],
-      itemStyle: { color: '#2f855a' },
+      itemStyle: {
+        borderRadius: [4, 4, 0, 0],
+        color: {
+          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [{ offset: 0, color: '#34d399' }, { offset: 1, color: '#1fa878' }],
+        },
+      },
     },
   ],
 }))
@@ -96,8 +104,10 @@ const diffOption = computed(() => ({
     {
       name: '差异数',
       type: 'bar',
+      barWidth: 32,
+      barMaxWidth: 40,
       data: diffTypes.value.map((item) => item.count),
-      itemStyle: { color: '#b7791f' },
+      itemStyle: { color: '#e3b045', borderRadius: [4, 4, 0, 0] },
     },
   ],
 }))
@@ -216,7 +226,7 @@ onBeforeUnmount(() => {
         README 扫描部分降级：{{ readme.degraded.map((item) => item.reason).join('；') }}
       </div>
 
-      <div class="kpi-grid">
+      <div class="kpi-grid kpi-grid--3">
         <KpiCard
           v-for="item in kpiItems"
           :key="item.label"

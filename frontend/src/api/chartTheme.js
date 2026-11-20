@@ -30,6 +30,14 @@ export function themedOption(option) {
     }
   }
 
+  if (next.title) {
+    next.title = {
+      ...next.title,
+      textStyle: { color: text, ...((next.title.textStyle) || {}) },
+      subtextStyle: { color: muted, ...((next.title.subtextStyle) || {}) },
+    }
+  }
+
   for (const axisKey of ['xAxis', 'yAxis']) {
     if (!next[axisKey]) continue
     const axes = Array.isArray(next[axisKey]) ? next[axisKey] : [next[axisKey]]
@@ -39,6 +47,22 @@ export function themedOption(option) {
       axis.splitLine = { lineStyle: { color: border }, ...(axis.splitLine || {}) }
     })
   }
+
+  const seriesList = Array.isArray(next.series) ? next.series : next.series ? [next.series] : []
+  seriesList.forEach((series) => {
+    if (!series || typeof series !== 'object') return
+    series.label = {
+      color: text,
+      fontSize: 12,
+      fontWeight: 500,
+      textBorderColor: 'transparent',
+      ...(series.label || {}),
+    }
+    series.labelLine = {
+      lineStyle: { color: muted },
+      ...(series.labelLine || {}),
+    }
+  })
 
   return next
 }

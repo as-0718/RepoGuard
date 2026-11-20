@@ -13,14 +13,13 @@ import FixPreviewDialog from '../components/FixPreviewDialog.vue'
 
 const DEFAULT_PAGE_SIZE = 20
 const MAX_KEYWORD_LENGTH = 64
-const MODULE_OPTIONS = ['命名与目录检查', '代码检查', '链接检查', '敏感信息与大文件检查', '报告']
+const MODULE_OPTIONS = ['命名与目录检查', '代码检查', '链接检查', '敏感信息与大文件检查']
 
 const MODULE_DESC = {
   命名与目录检查: '检查文件名、目录名是否规范，以及源码、文档、测试文件是否放在约定目录。',
   代码检查: '检查 Python/C 源码的注释完整性、危险函数、命令注入、裸异常、死循环、常见 bug 写法与调试残留。',
   链接检查: '检查 Markdown 链接是否可解析、路径是否有效，以及绝对路径、空格、中文等协作隐患。',
   敏感信息与大文件检查: '排查私钥、令牌、明文口令等敏感信息，并提示体积过大的文件。',
-  报告: 'README 与演示项目识别相关的检查结果。',
 }
 
 const RULE_GLOSSARY = [
@@ -133,8 +132,16 @@ const ruleOption = computed(() => ({
     {
       name: '命中次数',
       type: 'bar',
+      barWidth: 18,
+      barMaxWidth: 24,
       data: ruleRows.value.map((row) => Number(row.count || 0)),
-      itemStyle: { color: '#1f6feb' },
+      itemStyle: {
+        borderRadius: [0, 4, 4, 0],
+        color: {
+          type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+          colorStops: [{ offset: 0, color: '#3b8bef' }, { offset: 1, color: '#1d70e3' }],
+        },
+      },
     },
   ],
 }))
@@ -154,15 +161,19 @@ const matrixOption = computed(() => ({
       name: '高风险',
       type: 'bar',
       stack: 'risk',
+      barWidth: 32,
+      barMaxWidth: 40,
       data: matrixRows.value.map((row) => Number(row.high || 0)),
-      itemStyle: { color: '#c0392b' },
+      itemStyle: { color: '#e56159' },
     },
     {
       name: '建议',
       type: 'bar',
       stack: 'risk',
+      barWidth: 32,
+      barMaxWidth: 40,
       data: matrixRows.value.map((row) => Number(row.suggestion || 0)),
-      itemStyle: { color: '#b7791f' },
+      itemStyle: { color: '#e3b045' },
     },
   ],
 }))
@@ -362,7 +373,7 @@ onBeforeUnmount(() => {
       <div v-if="loading" class="progress-line" aria-hidden="true"></div>
       <ErrorBanner :error="error" :stale="true" @retry="load" />
 
-      <div class="kpi-grid">
+      <div class="kpi-grid kpi-grid--3">
         <KpiCard label="筛选后总数" :value="counts.total || 0" tone="neutral" />
         <KpiCard label="高风险" :value="counts.high || 0" tone="high" />
         <KpiCard label="建议" :value="counts.suggestion || 0" tone="suggestion" />
@@ -461,7 +472,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .module-guide {
   margin: 0 0 16px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -469,22 +480,29 @@ onBeforeUnmount(() => {
 
 .module-guide dl {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px 18px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
   margin: 0;
+}
+
+.module-guide dl > div {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 12px 14px;
 }
 
 .module-guide dt {
   font-weight: 600;
   font-size: 13px;
-  margin-bottom: 2px;
+  margin-bottom: 6px;
 }
 
 .module-guide dd {
   margin: 0;
   color: var(--color-muted);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .chart-note {

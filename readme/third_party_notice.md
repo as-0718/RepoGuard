@@ -20,9 +20,17 @@
 | vite | 8.3.6 | 前端构建与开发服务器 | MIT | https://github.com/vitejs/vite |
 | @vitejs/plugin-vue | 6.0.10 | Vue 单文件组件支持插件 | MIT | https://github.com/vitejs/vite-plugin-vue |
 
+## 桌面壳直接依赖（`desktop/package.json`，仅打包便携包需要）
+
+| 组件 | 版本 | 用途 | 许可证 | 来源 |
+|---|---|---|---|---|
+| electron | 45.3.3 | 桌面应用运行时与窗口壳（内嵌 Chromium 与 Node 运行时） | MIT | https://github.com/electron/electron |
+| electron-builder | 26.18.0 | Windows 便携包打包工具 | MIT | https://github.com/electron-userland/electron-builder |
+
 ## 传递依赖说明
 
 - fastapi 的传递依赖（如 starlette、pydantic 等）随各自原始许可证一并分发，未在本项目中直接修改。
+- Electron 内嵌的 Chromium 与 Node 运行时按其原始许可证随 Electron 分发；便携包中保留 Electron 自带的 `LICENSES.chromium.html`。
 - 规则引擎、全仓巡检、README 目录生成与命令行工具仅使用 Python 标准库，无第三方运行时依赖。
 
 ## 许可证要点（便于合规理解）

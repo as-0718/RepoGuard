@@ -6,13 +6,14 @@
 
 ## 1. 看板功能与四视图
 
-看板聚合当前仓库的巡检快照，**只读**、**无历史趋势**、**无自动修复**、**无用户体系**。
+看板聚合当前仓库的巡检快照，巡检结论与看板接口保持**只读**、不写仓库；多次巡检快照与修复 / 回滚事件落本地 SQLite，供历史页回看；**无用户体系**；写操作只出现在桌面版 fixer 白名单范围内。
 
 | 视图 | 路径 | 主要内容 | 交互 |
 |---|---|---|---|
 | 总览 | `/overview` | 文件数、问题总数、高风险/建议、僵尸候选、无法判定、降级项、跳过文件、扫描耗时；风险构成、来源模块、文件类型、问题最多文件 | KPI 与扇区/条形可跳转到问题明细；支持刷新 |
 | 问题明细 | `/issues` | 筛选后总数、高风险、建议；规则 Top10、模块×风险堆叠图；问题表 | 风险/模块/关键词筛选、排序、分页、行展开看建议与片段 |
 | 结构 / README | `/structure` | 文档数、Demo 确认/疑似、README 与目录区块状态、差异数；分区/ Demo / 差异图；差异、Demo、无法判定项表 | 差异类型点击本地过滤；README 索引纯文本预览 |
+| 历史 | `/history` | 历次巡检快照列表与累计巡查次数；点击快照回看当时结论；修复 / 回滚成功失败案例及涉及文件 | 按仓库筛选；快照点开看明细；案例展示结果、计数与备份路径 |
 | 关于 / 健康 | `/about` | API 状态、引擎可用性、缓存年龄；模块风险热力图；错误码矩阵；版本与配置摘要 | 只读；健康接口 503 时显示降级/不可用 |
 
 **状态同步**：筛选、排序、分页、关键词写入 URL 查询参数，刷新页面可恢复；切换仓库保留当前视图并重置分页。
@@ -64,7 +65,7 @@ npm run build
 
 ## 3. API 参数与响应示例
 
-所有接口均为 `GET`，只读，响应 `Cache-Control: no-store`。
+上表接口均为 `GET`，只读，响应 `Cache-Control: no-store`。
 
 ### 3.1 接口与参数
 
@@ -74,6 +75,9 @@ npm run build
 | `/api/dashboard/overview` | `repo`（可选，≤512）、`refresh`（0/1） | 总览快照 |
 | `/api/dashboard/issues` | `repo`、`refresh`、`risk_level`（`all/high/suggestion`）、`source_module`（模块名或 `all`）、`keyword`（≤64）、`page`（≥1）、`page_size`（1–100）、`sort`（`risk_level/file_path/line_no/rule_id/source_module/message`）、`order`（`asc/desc`） | 分页问题明细与图表 |
 | `/api/dashboard/structure` | `repo`、`refresh` | README/结构投影 |
+| `/api/dashboard/history` | `repo`（可选）、`limit`（1–200，默认 20） | 历次巡检快照列表与 `total_count`（累计巡查次数） |
+| `/api/dashboard/history/{snapshot_id}` | 路径 `snapshot_id` | 单个快照明细及其问题；不存在返回 `HISTORY_NOT_FOUND` 404 |
+| `/api/dashboard/fix-events` | `repo`（可选，按仓库标识）、`limit`（1–200，默认 20） | 修复 / 回滚事件：动作、结果、成功/跳过/回滚/失败计数、涉及文件清单（`path` 与 `mtime`）、耗时、请求 ID |
 | `/api/health` | 无 | 既有健康接口；降级时返回 503 |
 
 ### 3.2 响应示例（脱敏）
@@ -131,7 +135,7 @@ npm run build
     {
       "file_path": "docs/README.md",
       "line_no": 12,
-      "rule_id": "NAMING-001",
+      "rule_id": "naming-001",
       "source_module": "命名与目录检查",
       "risk_level": "建议",
       "message": "文件命名建议使用小写短横线",
@@ -145,7 +149,7 @@ npm run build
   "total_pages": 1,
   "counts": { "total": 12, "high": 3, "suggestion": 9 },
   "charts": {
-    "rule_breakdown": [{ "rule_id": "NAMING-001", "count": 4 }],
+    "rule_breakdown": [{ "rule_id": "naming-001", "count": 4 }],
     "module_risk_matrix": [{ "module": "代码检查", "high": 2, "suggestion": 5 }]
   }
 }
@@ -183,6 +187,82 @@ npm run build
     "demo_section": { "name": "Demo 工程", "items": [] }
   },
   "demo": { "confirmed_items": [], "suspected_count": 1 }
+}
+```
+
+`/api/dashboard/history?repo=demo-repo`（节选）：
+
+```json
+{
+  "history": [
+    {
+      "id": 12,
+      "repo_label": "demo-repo",
+      "repo_key": "…",
+      "scanned_at": "2026-01-01T02:00:00+00:00",
+      "duration_ms": 1200,
+      "files_count": 18,
+      "issue_count": 12,
+      "must_fix_count": 3,
+      "suggestion_count": 9,
+      "zombie_count": 1,
+      "undetermined_count": 0,
+      "status": "正常",
+      "created_at": "2026-01-01T02:00:00+00:00"
+    }
+  ],
+  "total_count": 12,
+  "generated_at": "2026-01-01T02:05:00+00:00"
+}
+```
+
+`/api/dashboard/history/12`（节选）：
+
+```json
+{
+  "snapshot": {
+    "id": 12,
+    "repo_label": "demo-repo",
+    "scanned_at": "2026-01-01T02:00:00+00:00",
+    "status": "正常",
+    "issues": [
+      {
+        "file_path": "docs/README.md",
+        "line_no": 12,
+        "rule_id": "naming-001",
+        "source_module": "命名与目录检查",
+        "risk_level": "建议",
+        "message": "文件命名建议使用小写短横线",
+        "suggestion": "将文件名改为小写短横线形式"
+      }
+    ]
+  }
+}
+```
+
+`/api/dashboard/fix-events?repo=demo-repo`（节选）：
+
+```json
+{
+  "events": [
+    {
+      "id": 5,
+      "created_at": "2026-01-01T02:10:00+00:00",
+      "repo_label": "demo-repo",
+      "action": "apply",
+      "result": "applied=2 skipped=0",
+      "applied_count": 2,
+      "skipped_count": 0,
+      "restored_count": 0,
+      "failed_count": 0,
+      "files": [
+        { "path": "lab/uart.c", "mtime": "2026-01-01T02:10:00+00:00" }
+      ],
+      "duration_ms": 86,
+      "request_id": "req-…"
+    }
+  ],
+  "generated_at": "2026-01-01T02:11:00+00:00"
 }
 ```
 
@@ -265,5 +345,5 @@ npm run build
 - 部署与容器产物仅做静态校验，不代表已在目标机构建或部署。
 - CodeArts 流水线 YAML **schema 未核实**，以控制台可视化配置为准；未托管代码时定时不生效。
 - Node 版本口径：本机实测 **v24.19.0 / npm 11.17.0**，用户口径 v22.23.2 / 10.9.8；工程以 `engines.node >= 22.12` 为兼容目标。
-- 看板只展示当前快照，**不提供历史趋势**；不写仓库、不提供写操作。
+- 看板巡检结论只读、不写仓库；历次巡检快照与修复 / 回滚事件由本地 SQLite 留存，历史页可回看快照明细、累计巡查次数与成功失败案例；写操作仅限桌面版 fixer 白名单范围。
 - 示例数据中的路径均为相对路径，已脱敏；文档不含真实密钥、真实域名与个人绝对路径。

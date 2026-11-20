@@ -188,7 +188,8 @@ async def _prepare(
         _raise_api("DASHBOARD_UNAVAILABLE", 503, "看板数据服务当前不可用", "未配置可用的仓库目录")
     root = resolve_dashboard_repo(repo, web_settings)
     descriptor = _descriptor_for(root, repo, web_settings)
-    key = snapshot_key(root)
+    repo_key = descriptor.label
+    cache_key = snapshot_key(root)
     deadline = time.monotonic() + dashboard_settings.scan_timeout_seconds
     loader = lambda: load_snapshot(
         root,
@@ -199,7 +200,7 @@ async def _prepare(
     started = time.perf_counter()
     try:
         snapshot, cache_meta = await asyncio.wait_for(
-            asyncio.to_thread(cache.get_or_load, key, loader, force=refresh == 1, deadline=deadline),
+            asyncio.to_thread(cache.get_or_load, cache_key, loader, force=refresh == 1, deadline=deadline),
             timeout=dashboard_settings.scan_timeout_seconds + dashboard_settings.queue_timeout_seconds + 1.0,
         )
     except CacheBusyError as exc:
@@ -230,7 +231,7 @@ async def _prepare(
             {
                 "request_id": _request_id(request),
                 "repo_label": descriptor.label,
-                "repo_hash": key[:12],
+                "repo_hash": cache_key[:12],
                 "cached": cache_meta.cached,
                 "cache_age_seconds": cache_meta.age_seconds,
                 "duration_ms": int((time.perf_counter() - started) * 1000),
@@ -242,7 +243,7 @@ async def _prepare(
         )
     )
     if not cache_meta.cached:
-        await asyncio.to_thread(_persist_snapshot, web_settings, key, descriptor, snapshot)
+        await asyncio.to_thread(_persist_snapshot, web_settings, repo_key, descriptor, snapshot)
     request.state.error_code = "OK"
     return snapshot
 
@@ -400,13 +401,13 @@ def history(
     limit: int = fastapi.Query(default=20, ge=1, le=200),
     web_settings: object = fastapi.Depends(get_web_settings),
 ) -> starlette.responses.JSONResponse:
-    from .service import resolve_dashboard_repo, snapshot_key
+    from .service import resolve_dashboard_repo
     from ..storage import count_snapshots, list_snapshots
 
     repo_key = None
     if repo and repo.strip():
         root = resolve_dashboard_repo(repo, web_settings)
-        repo_key = snapshot_key(root)
+        repo_key = root.name
     records = list_snapshots(web_settings.db_path, repo_key=repo_key, limit=limit)
     total_count = count_snapshots(web_settings.db_path, repo_key=repo_key)
     return _json_response(

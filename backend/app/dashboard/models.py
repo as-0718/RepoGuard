@@ -44,6 +44,12 @@ class RuleCount:
 
 
 @dataclass(frozen=True, slots=True)
+class CategoryCount:
+    category: str
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
 class ModuleRisk:
     module: str
     high: int
@@ -160,6 +166,7 @@ class DashboardSnapshot:
     summary: Mapping[str, int]
     risk_breakdown: Mapping[str, int]
     module_breakdown: tuple[ModuleCount, ...]
+    category_breakdown: tuple[CategoryCount, ...]
     file_type_breakdown: tuple[TypeCount, ...]
     top_files: tuple[FileCount, ...]
     files_count: int

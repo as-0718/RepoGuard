@@ -11,6 +11,7 @@ from pathlib import Path
 from app.api.security import RepoPathError, resolve_repo_root
 from app.api.settings import WebSettings
 from app.dashboard.models import (
+    CategoryCount,
     DiffProjection,
     ItemReason,
     ModuleCount,
@@ -465,6 +466,32 @@ class DashboardServiceTests(unittest.TestCase):
             ),
         )
         self.assertEqual([item.module for item in breakdown][:4], list(_FIXED_MODULES))
+
+    # T-S15b
+    def test_overview_category_breakdown_maps_rules(self):
+        findings = (
+            _issue(rule_id="code-004", module="代码检查"),
+            _issue(rule_id="code-001", module="代码检查", line_no=2),
+            _issue(rule_id="naming-002", module="命名与目录检查", line_no=3),
+            _issue(rule_id="code-011", module="代码检查", risk=RiskLevel.SUGGESTION, line_no=4),
+            _issue(rule_id="link-003", module="链接检查", line_no=5),
+            _issue(rule_id="sens-002", module="敏感信息与大文件检查", risk=RiskLevel.SUGGESTION, line_no=6),
+            _issue(rule_id="report-001", module="报告", line_no=7),
+        )
+        _, snapshot = self._load(health=_health((_file("a.py", findings),)))
+
+        breakdown = build_overview(snapshot)["charts"]["category_breakdown"]
+
+        self.assertEqual(
+            breakdown,
+            (
+                CategoryCount("代码质量", 1),
+                CategoryCount("安全漏洞", 1),
+                CategoryCount("风格问题", 1),
+                CategoryCount("文档问题", 2),
+                CategoryCount("其他", 2),
+            ),
+        )
 
     # T-S16
     def test_overview_file_type_breakdown_has_three_keys(self):

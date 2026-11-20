@@ -301,7 +301,7 @@ class DashboardApiTests(unittest.TestCase):
         )
         self.assertEqual(
             set(body["charts"]),
-            {"risk_breakdown", "module_breakdown", "file_type_breakdown", "top_files"},
+            {"risk_breakdown", "module_breakdown", "category_breakdown", "file_type_breakdown", "top_files"},
         )
         summary = body["summary"]
         self.assertEqual(summary["issue_count"], 25)

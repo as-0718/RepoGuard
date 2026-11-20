@@ -19,6 +19,7 @@ from .models import (
     DashboardStructure,
     DemoProjection,
     DiffProjection,
+    CategoryCount,
     FileCount,
     IndexProjection,
     IssuePage,
@@ -42,6 +43,65 @@ _FIXED_MODULES = (
     "链接检查",
     "敏感信息与大文件检查",
 )
+
+# 定稿看板的问题类别口径；无对应规则的类别计数为 0，由前端决定是否展示。
+_FIXED_CATEGORIES = (
+    "代码质量",
+    "安全漏洞",
+    "性能问题",
+    "风格问题",
+    "错误处理",
+    "测试缺失",
+    "文档问题",
+    "其他",
+)
+
+_CATEGORY_BY_RULE: Mapping[str, str] = {
+    # 安全漏洞：危险函数 / 动态执行 / 命令注入 / 凭据密钥
+    "code-004": "安全漏洞",
+    "code-005": "安全漏洞",
+    "code-006": "安全漏洞",
+    "sens-003": "安全漏洞",
+    "sens-004": "安全漏洞",
+    "sens-005": "安全漏洞",
+    "sens-006": "安全漏洞",
+    # 文档问题：注释缺失 / Markdown 链接
+    "code-001": "文档问题",
+    "code-002": "文档问题",
+    "code-003": "文档问题",
+    # 风格问题：命名与目录约定
+    # 代码质量：可读性、健壮性、调试残留等
+    "code-007": "代码质量",
+    "code-009": "代码质量",
+    "code-010": "代码质量",
+    "code-011": "代码质量",
+    "code-012": "代码质量",
+    "code-013": "代码质量",
+    # 其他：体积 / 降级类
+    "code-008": "其他",
+    "sens-001": "其他",
+    "sens-002": "其他",
+    "sens-007": "其他",
+}
+
+
+def _category_for_rule(rule_id: str) -> str:
+    if rule_id in _CATEGORY_BY_RULE:
+        return _CATEGORY_BY_RULE[rule_id]
+    prefix = rule_id.split("-", 1)[0]
+    if prefix == "link":
+        return "文档问题"
+    if prefix == "naming":
+        return "风格问题"
+    return "其他"
+
+
+def _build_category_breakdown(issues: Sequence[IssueRecord]) -> tuple[CategoryCount, ...]:
+    counts = {name: 0 for name in _FIXED_CATEGORIES}
+    for issue in issues:
+        counts[_category_for_rule(issue.rule_id)] += 1
+    return tuple(CategoryCount(name, counts[name]) for name in _FIXED_CATEGORIES if counts[name] > 0)
+
 _MARKDOWN_EXTENSIONS = {"md", "markdown", "mdown", "mkd"}
 _CODE_EXTENSIONS = {
     "py", "c", "h", "cc", "cpp", "hpp", "cs", "java", "kt", "kts", "go", "rs",
@@ -278,6 +338,7 @@ def load_snapshot(
         for name, count in sorted(module_counts.items())
         if name not in _FIXED_MODULES
     )
+    category_breakdown = _build_category_breakdown(issues)
     type_counts = {"markdown": 0, "code": 0, "other": 0}
     for file_entry in health.files:
         type_counts[_classify_file_type(getattr(file_entry, "file_path", ""))] += 1
@@ -313,6 +374,7 @@ def load_snapshot(
             "suggestion": health.summary.suggestion_count,
         },
         module_breakdown=module_breakdown,
+        category_breakdown=category_breakdown,
         file_type_breakdown=file_type_breakdown,
         top_files=top_files,
         files_count=len(health.files),
@@ -331,6 +393,7 @@ def build_overview(snapshot: DashboardSnapshot) -> dict[str, object]:
         "charts": {
             "risk_breakdown": dict(snapshot.risk_breakdown),
             "module_breakdown": snapshot.module_breakdown,
+            "category_breakdown": snapshot.category_breakdown,
             "file_type_breakdown": snapshot.file_type_breakdown,
             "top_files": snapshot.top_files,
         },
